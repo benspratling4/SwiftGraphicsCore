@@ -47,7 +47,7 @@ public struct Path {
 	
 	public var subPaths:[SubPath]
 	
-	public init(subPaths:[SubPath]) {
+	public init(subPaths:[SubPath] = []) {
 		self.subPaths = subPaths
 	}
 	
