@@ -415,7 +415,7 @@ public struct PathSegment {
 	func intersectionCountFromNegativeInfinityX(at point:Point, from start:Point)->Int {
 		switch shape {
 		case .point:
-			return (end.y == point.y && end.x <= point.x) ? 1 : 0
+			return 0
 			
 		case .line:
 			if point.y > start.y && point.y > end.y {
