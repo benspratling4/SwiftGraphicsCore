@@ -54,7 +54,8 @@ public struct Path {
 	public func contains(_ point:Point, overlapping:SubPathOverlapping = .evenOdd)->Bool {
 		switch overlapping {
 		case .evenOdd:
-			return subPaths.map({$0.contains(point)}).count % 2 != 0
+			let hitCount:Int = subPaths.filter({ $0.contains(point) }).count
+			return hitCount % 2 != 0
 		case .nonZero:
 			return subPaths.map({$0.contains(point)}).reduce(false, { $0 || $1 })
 		}
@@ -485,7 +486,9 @@ public struct PathSegment {
 			}
 			let falseLine = Line(point0:Point(x: minX - 1.0, y: point.y), point1: point)
 			let intersectionPoints = intersections(with: falseLine, start: start)
-			if let onlyIntersection = intersectionPoints.first, intersectionPoints.count == 1 {
+			let leftIntersections = intersectionPoints.filter({ $0.0.x <= point.x })
+			
+			if let onlyIntersection = leftIntersections.first, intersectionPoints.count == 1 {
 				//TODO: add logic to avoid double counting start/end nodes
 				//no idea if this is actually right
 				if start.y < point.y, end.y <= point.y {
@@ -495,7 +498,7 @@ public struct PathSegment {
 					return 0
 				}
 			}
-			return intersectionPoints.count
+			return leftIntersections.count
 		}
 	}
 	
@@ -563,11 +566,13 @@ public struct PathSegment {
 				return Point(x:xa*t*t*t + xb*t*t + xc*t + xd
 					, y: ya*t*t*t + yb*t*t + yc*t + yd)
 			}
-			
-			return acceptibleSolutions.map({
+			let solutionsCoordinates:[(Point, SGFloat)] = acceptibleSolutions.map({
 				return (position(t:$0), $0)
 			})
 			.sorted(by: {$0.1 < $1.1})
+			
+			//todo: figur eout how to reject intersections that aren't between the bounds of line
+			return solutionsCoordinates
 		}
 	}
 	

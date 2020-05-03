@@ -125,7 +125,8 @@ public class SampledGraphicsContext : GraphicsContext {
 				case .subsampling(resolution: let resolution):
 					let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
 					let subSamplePixelLocation:[Point] = subSampleLocations.map({ states[states.count-1].transformation.transform($0) })
-					let hitCount:Float32 = Float32(subSamplePixelLocation.filter({ path.contains($0) }).count)
+					let hitPoints:[Point] = subSamplePixelLocation.filter({ path.contains($0) })
+					let hitCount:Float32 = Float32(hitPoints.count)
 					if hitCount <= 0.0 { continue }
 					let antialiasRatio:Float32 = hitCount/Float32(subSampleLocations.count)
 					if underlyingImage.colorSpace.hasAlpha {
