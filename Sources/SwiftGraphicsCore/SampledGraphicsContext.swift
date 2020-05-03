@@ -13,11 +13,13 @@ public class SampledGraphicsContext : GraphicsContext {
 	///initializes new storage for the context
 	public init(dimensions:Size, colorSpace:ColorSpace) {
 		underlyingImage = SampledImage(width: Int(dimensions.width.rounded()), height: Int(dimensions.height.rounded()), colorSpace: colorSpace, bytes: nil)
+		updateSubSampledPixels()
 	}
 	
 	///uses the data already found in the image
 	public init(imageBuffer:SampledImage) {
 		self.underlyingImage = imageBuffer
+		updateSubSampledPixels()
 	}
 	
 	public enum Antialiasing {
