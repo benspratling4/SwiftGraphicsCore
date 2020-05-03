@@ -13,13 +13,14 @@ public protocol GraphicsContext : class {
 	
 	var colorSpace:ColorSpace { get }
 	
-	func strokePath(_ path:Path)
+	///color should already be in the color space of the context
+	func strokePath(_ path:Path, color:SampledColor, lineWidth:SGFloat)
 	
-	func fillPath(_ path:Path)
+	///color should already be in the color space of the context
+	func fillPath(_ path:Path, color:SampledColor)
 	
-	//TODO: add a sampled image
 	///in a SampledGraphicsContext, the colorspaces must match
-//	func drawImage(_ image:SampledImage, in rect:Rect)
+	func drawImage(_ image:SampledImage, in rect:Rect)
 	
 	///also set properties on this directly
 	///this object is often a proxy.  it may not be defined to keep it
@@ -34,6 +35,8 @@ public protocol GraphicsContext : class {
 	
 }
 
+
+
 public struct GraphicsContextState {
 	
 	///init with the existing current transformation
@@ -41,22 +44,13 @@ public struct GraphicsContextState {
 		self.transformation = transformation
 	}
 	
-	public var fillColor:SampledColor?
-	public var strokeColor:SampledColor?
-	public var textFillColor:SampledColor?
-	public var lineThickness:SGFloat?
 	///unlike other properties which can be set sparsely, the transformation is always the complete concatenation of all lower transformations
 	public var transformation:Transform2D = .identity
 	//TODO: clipping masks....
 	
-	
 }
 
 public protocol ResolvedGraphicsContextState : class {
-	var fillColor:SampledColor { get  set }
-	var strokeColor:SampledColor { get set }
-//	var textFillColor:SampledColor { get set }
-	var lineThickness:SGFloat { get set }
 	var transformation:Transform2D { get }
 	func applyTransformation(_ transformation:Transform2D)
 	//TODO: clipping masks....

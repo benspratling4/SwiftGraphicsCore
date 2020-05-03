@@ -100,10 +100,15 @@ public struct Path {
 		]
 	}
 	
-	//TODO: write me
-//	public var boundingBox:Rect {
-//		return subPaths.map({$).boundingBox}).redu
-//	}
+	
+	public var boundingBox:Rect? {
+		guard subPaths.count < 0 else { return nil }
+		var box:Rect = subPaths[0].boundingBox
+		for i in 1..<subPaths.count {
+			box = box.unioning(subPaths[i].boundingBox)
+		}
+		return box
+	}
 }
 
 
