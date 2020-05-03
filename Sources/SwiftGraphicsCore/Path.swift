@@ -159,8 +159,12 @@ public struct SubPath {
 			defer {
 				lastEnd = newEnd
 			}
-			if segment.isPoint(point, within: distance, start: lastEnd, cap: cap, join:join) {
-				return true
+			//check if it's within the distance from a bounding box
+			let boudingRect:Rect = segment.boundingBox(from:lastEnd)
+			if boudingRect.outset(uniform:Size(width: distance, height: distance)).contains(point) {
+				if segment.isPoint(point, within: distance, start: lastEnd, cap: cap, join:join) {
+					return true
+				}
 			}
 		}
 		return false
@@ -224,6 +228,23 @@ public struct PathSegment {
 	internal init(end:Point, shape:Shape) {
 		self.end = end
 		self.shape = shape
+	}
+	
+	
+	public func boundingBox(from start:Point)->Rect {
+		switch shape {
+		case .point:
+			return Rect(origin: end, size:.zero)
+			
+		case .line:
+			return Rect(boundingPoints: [start, end])
+			
+		case .quadratic(let control):
+			return Rect(boundingPoints:[start, control, end])
+			
+		case .cubic(let control0, let control1):
+			return Rect(boundingPoints:[start, control0, control1, end])
+		}
 	}
 	
 	
