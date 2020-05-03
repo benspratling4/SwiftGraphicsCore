@@ -79,9 +79,21 @@ public struct Path {
 		subPaths[subPaths.count-1].addLine(to: point)
 	}
 	
+	public func byAddingLine(to point:Point)->Path {
+		var newPath = self
+		newPath.addLine(to: point)
+		return newPath
+	}
+	
 	public mutating func addCurve(near controlPoint:Point, to point:Point) {
 		guard subPaths.count > 0 else { return }
 		subPaths[subPaths.count-1].addCurve(near: controlPoint, to: point)
+	}
+	
+	public func byAddingCurve(near controlPoint:Point, to point:Point)->Path {
+		var newPath = self
+		newPath.addCurve(near: controlPoint, to: point)
+		return newPath
 	}
 	
 	public mutating func addCurve(near controlPoint:Point, and controlPoint2:Point, to point:Point) {
@@ -89,9 +101,21 @@ public struct Path {
 		subPaths[subPaths.count-1].addCurve(near: controlPoint, and: controlPoint2, to: point)
 	}
 	
+	public func byAddingCurve(near controlPoint:Point, and controlPoint2:Point, to point:Point)->Path {
+		var newPath = self
+		newPath.addCurve(near: controlPoint, and: controlPoint2, to: point)
+		return newPath
+	}
+	
 	public mutating func close() {
 		guard subPaths.count > 0 else { return }
 		subPaths[subPaths.count-1].close()
+	}
+	
+	public func byCLosing()->Path {
+		var newPath = self
+		newPath.close()
+		return newPath
 	}
 	
 	public init(inRect:Rect) {
