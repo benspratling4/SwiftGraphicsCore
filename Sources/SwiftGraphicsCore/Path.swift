@@ -207,6 +207,16 @@ public struct SubPath {
 		var bounds:Rect = Rect(origin: segments[0].end, size: .zero)
 		for segment in segments {
 			bounds.union(segment.end)
+			switch segment.shape {
+			case .quadratic(let control):
+				bounds.union(control)
+				
+			case .cubic(let control0, let control1):
+				bounds.union(control0)
+				bounds.union(control1)
+			default:
+				break
+			}
 		}
 		return bounds
 	}
