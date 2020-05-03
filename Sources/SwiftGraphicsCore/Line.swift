@@ -42,7 +42,7 @@ public struct Line {
 		let v:Point = Point(x:otherLine.point1.x - otherLine.point0.x, y:otherLine.point1.y - otherLine.point0.y)
 		let w:Point = Point(x:point0.x - otherLine.point0.x, y:point0.y - otherLine.point0.y)
 		
-		//detect coincident and parrallel lines
+		//TODO: detect coincident and parrallel lines
 		
 		
 		let scalar:SGFloat = (((v.y)*(w.x)) - ((v.x)*(w.y))) / (((v.x)*(u.y)) - ((v.y)*(u.x)))
@@ -62,6 +62,27 @@ public struct Line {
 			return (point, pointDistance)
 		}
 		return (intersection, fraction)
+	}
+	
+	///if this point is actually ON the line, then it reports the fraction
+	public func intersection(with point:Point, tolerance:SGFloat = 0.0)->SGFloat? {
+		if Line(point0: point, point1: point0).length <= tolerance {
+			return 0.0
+		}
+		if Line(point0: point, point1: point1).length <= tolerance {
+			return 1.0
+		}
+		let vector:Point = point1 - point0
+		let perpendicular:Point = Point(x: -vector.y, y: vector.x)
+		let perpendicularLine:Line = Line(point0: point, point1: point + perpendicular)
+		guard let (intersection, fraction):(Point, SGFloat) = intersectionWithLine(perpendicularLine) else {
+			return nil
+		}
+		
+		guard Line(point0: intersection, point1: point).length <= tolerance else {
+			return nil
+		}
+		return fraction
 	}
 	
 	//returns the nearest point, and its distance

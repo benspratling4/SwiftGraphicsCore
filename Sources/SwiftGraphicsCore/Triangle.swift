@@ -139,12 +139,35 @@ public struct Triangle {
 		return orderedHull.areaOfConvexHull
 	}
 	
+	
+	var subPath:SubPath {
+		var path = SubPath(startingPoint: point0)
+		path.addLine(to: point1)
+		path.addLine(to: point2)
+		return path
+	}
+	
+	
+	func intersections(line:Line)->[(sideIndex:Int, fraction:SGFloat, coordinates:Point)] {
+		return sides.enumerated().compactMap { (sideIndex, side) -> (sideIndex:Int, fraction:SGFloat, coordinates:Point)? in
+			guard let fraction = side.fractionOfSegmentIntersection(with:line) else { return nil }
+			let coordinates = side.pointAtFraction(fraction)
+			return (sideIndex:sideIndex, fraction:fraction, coordinates:coordinates)
+		}
+	}
+	
+	
 }
 
 
 extension Line {
 	
 	public func segmentIntersection(with line:Line)->Point? {
+		guard let fraction = fractionOfSegmentIntersection(with: line) else { return nil }
+		return pointAtFraction(fraction)
+	}
+	
+	public func fractionOfSegmentIntersection(with line:Line)->SGFloat? {
 		//determine if there is an intersection
 		if Triangle(point0: point0, point1: point1, point2: line.point0).isRightHanded == Triangle(point0: point0, point1: point1, point2: line.point1).isRightHanded {
 			return nil
@@ -161,7 +184,7 @@ extension Line {
 		
 		let scalar:SGFloat = (((v.y)*(w.x)) - ((v.x)*(w.y))) / (((v.x)*(u.y)) - ((v.y)*(u.x)))
 		if scalar.isNaN || scalar.isInfinite { return nil }
-		return pointAtFraction(scalar)
+		return scalar
 	}
 }
 
