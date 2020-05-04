@@ -430,7 +430,7 @@ public struct PathSegment {
 			}
 			var yIntercepts:Int = 0
 			//to avoid double-counting a vertex as being on both sides, an endpoint is considered a hit only if both vertexes are on the same y side of the infinity x line, in this case >=
-			if start.y == point.y, start.x <= point.x, end.y >= point.y {
+		/*	if start.y == point.y, start.x <= point.x, end.y >= point.y {
 				yIntercepts += 1
 			}
 			if end.y == point.y, end.x <= point.x, start.y >= point.y {
@@ -438,10 +438,13 @@ public struct PathSegment {
 			}
 			if yIntercepts > 0 {
 				return yIntercepts
-			}
+			}*/
 			let minX:SGFloat = min(start.x, end.x)
 			let falseLine = Line(point0:Point(x: minX - 1.0, y: point.y), point1: point)
 			let intersection:(Point, SGFloat)? = Line(point0: start, point1: end).intersectionWithLine(falseLine)
+			if let intersectionX = intersection?.0.x, intersectionX > point.x {
+				return 0
+			}
 			return intersection == nil ? 0 : 1
 			
 		case .quadratic(let control):
@@ -504,14 +507,19 @@ public struct PathSegment {
 	func intersections(with line:Line, start:Point)->[(Point, SGFloat)] {
 		switch shape {
 		case .point:
-			// no idea if this makes any sense
-			if let fraction = line.intersection(with:start) {
-				return [(start, fraction)]
+			if let fraction = line.intersection(with: end) {
+				return [(end, fraction)]
 			}
 			return []
 			
 		case .line:
-			return [Line(point0: start, point1: end).intersectionWithLine(line)].compactMap({ $0 })
+			guard let (point, fraction):(Point, SGFloat) = Line(point0: start, point1: end).intersectionWithLine(line) else {
+				return []
+			}
+			if fraction < 0.0 || fraction > 1.0 {
+				return []
+			}
+			return [(point, fraction)]
 		
 		case .quadratic(let control0):
 			
