@@ -126,9 +126,9 @@ public struct GenericRGBAColorSpace : ColorSpace {
 			}
 			return scaled + value
 		}
-		let sourceRedPreMultiplied:UInt8 = byteMultiply(sourceRed, sourceAlpha)
-		let sourceGreenPreMultiplied:UInt8 = byteMultiply(sourceGreen, sourceAlpha)
-		let sourceBluePreMultiplied:UInt8 = byteMultiply(sourceBlue, sourceAlpha)
+		let sourceRedPreMultiplied:UInt8 = sourceRed// byteMultiply(sourceRed, sourceAlpha)
+		let sourceGreenPreMultiplied:UInt8 = sourceGreen//byteMultiply(sourceGreen, sourceAlpha)
+		let sourceBluePreMultiplied:UInt8 = sourceBlue//byteMultiply(sourceBlue, sourceAlpha)
 		
 		let alphaFilter:UInt8 = 255 - sourceAlpha
 		let oldAlpha:UInt8 = over.components[3][0]

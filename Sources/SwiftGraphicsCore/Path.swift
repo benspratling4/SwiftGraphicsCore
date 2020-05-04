@@ -459,18 +459,17 @@ public struct PathSegment {
 			}
 			let falseLine = Line(point0: Point(x: minX - 1.0, y: point.y), point1: point)
 			let intersectionPoints = intersections(with: falseLine, start: start)
-			let leftIntersections = intersectionPoints.filter({ $0.0.x <= point.x })
-			if let onlyIntersection = leftIntersections.first
+			if let onlyIntersection = intersectionPoints.first
 				,intersectionPoints.count == 1 {
 				//logic to avoid double counting start/end nodes
-				if start.y < point.y, end.y <= point.y {
+			/*	if start.y < point.y, end.y <= point.y {
 					return 0
 				}
 				if start.y <= point.y, end.y < point.y {
 					return 0
-				}
+				}*/
 			}
-			return leftIntersections.count
+			return intersectionPoints.count
 			
 		case .cubic(let control0, let control1):
 			let minX = min(start.x, control0.x, control1.x, end.x)
@@ -487,19 +486,17 @@ public struct PathSegment {
 			}
 			let falseLine = Line(point0:Point(x: minX - 1.0, y: point.y), point1: point)
 			let intersectionPoints = intersections(with: falseLine, start: start)
-			let leftIntersections = intersectionPoints.filter({ $0.0.x <= point.x })
-			
-			if let onlyIntersection = leftIntersections.first, intersectionPoints.count == 1 {
+			if let onlyIntersection = intersectionPoints.first, intersectionPoints.count == 1 {
 				//TODO: add logic to avoid double counting start/end nodes
 				//no idea if this is actually right
-				if start.y < point.y, end.y <= point.y {
+			/*	if start.y < point.y, end.y <= point.y {
 					return 0
 				}
 				if start.y <= point.y, end.y < point.y {
 					return 0
-				}
+				}*/
 			}
-			return leftIntersections.count
+			return intersectionPoints.count
 		}
 	}
 	
@@ -512,39 +509,32 @@ public struct PathSegment {
 				return [(start, fraction)]
 			}
 			return []
+			
 		case .line:
 			return [Line(point0: start, point1: end).intersectionWithLine(line)].compactMap({ $0 })
 		
 		case .quadratic(let control0):
-			//up to 2 solutions
-			let Q:SGFloat = (line.point1.y - line.point0.y) * (start.x - 2.0 * control0.x + end.x)
-			let S:SGFloat = (line.point0.x - line.point1.x) * (start.y - 2.0 * control0.y + end.y)
-			let R:SGFloat = (line.point1.y - line.point0.y) * (2.0 * control0.x - 2.0 * start.x)
-			let T:SGFloat = (line.point0.x - line.point1.x) * (2.0 * control0.y - 2.0 * start.y)
-			let A = S + Q
-			let B = R + T
-			let C:SGFloat = line.point1.y * start.x - line.point0.y * start.x + line.point0.x * start.y + line.point1.x * start.y + line.point0.x * (line.point0.y - line.point1.y) + line.point0.y * (line.point1.x - line.point0.x)
-			if A == 0.0 {
-				//no solutions
-					return []
-			}
-			let rand0:SGFloat = pow(B, 2.0) - 4.0 * A * C
-			if rand0 < 0.0 {
-				//no solutions
-				return []
-			}
-			let t0:SGFloat = (-B + sqrt(rand0))/(2.0 * A)
-			let t1:SGFloat = (-B - sqrt(rand0))/(2.0 * A)
-			var potentialSolutions:[SGFloat] = [t0]
-			if t0 != t1 {
-				potentialSolutions.append(t1)
-			}
-			let workingSolutions:[SGFloat] = potentialSolutions.filter({ (0.0...1.0).contains($0) })
 			
-			return workingSolutions.map {
+			let O:Point = line.point1
+			let lineDiff:Point = O-line.point0
+			let D:Point = lineDiff/lineDiff.magnitude
+			
+			let alpha:SGFloat = (start + end - 2 * control0).crossProductMagnitude(rhs: D)
+			let beta:SGFloat = (2 * (control0 - start)).crossProductMagnitude(rhs: D)
+			let gamma:SGFloat = (start-O).crossProductMagnitude(rhs: D)
+			let roots:[SGFloat] = realQuadraticRoots(a: alpha, b: beta, c: gamma)
+			let acceptibleRoots:[SGFloat] = roots.filter({ 0 <= $0 || $0 <= 1.0 })
+			
+			let solutionsPositions:[(Point, SGFloat)] = acceptibleRoots.map {
 				return (postionAndDerivative(from: start, fraction: $0).0, $0)
 			}
-			.sorted(by: {$0.1 < $1.1})
+			let inRangePositions:[(Point, SGFloat)] = solutionsPositions.filter { pointAndFraction in
+				guard let fraction = line.intersection(with: pointAndFraction.0) else { return false }
+				return fraction >= 0.0 && fraction <= 1.0
+			}
+			let sortedInRangePositions = inRangePositions.sorted(by: {$0.1 < $1.1})
+			return sortedInRangePositions
+			
 			
 		case .cubic(let control0, let control1):
 			//up to 3 solutions
@@ -570,10 +560,11 @@ public struct PathSegment {
 			let solutionsCoordinates:[(Point, SGFloat)] = acceptibleSolutions.map({
 				return (position(t:$0), $0)
 			})
-			.sorted(by: {$0.1 < $1.1})
-			
-			//todo: figur eout how to reject intersections that aren't between the bounds of line
-			return solutionsCoordinates
+			let inRangePositions:[(Point, SGFloat)] = solutionsCoordinates.filter { pointAndFraction in
+				guard let fraction = line.intersection(with: pointAndFraction.0, tolerance: 0.02) else { return false }
+				return fraction >= 0.0 && fraction <= 1.0
+			}
+			return inRangePositions.sorted(by: {$0.1 < $1.1})
 		}
 	}
 	

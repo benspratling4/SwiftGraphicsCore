@@ -15,6 +15,10 @@ public struct Point : Hashable {
 		self.y = y
 	}
 	
+	public var magnitude:SGFloat {
+		return sqrt(x * x + y * y)
+	}
+	
 	
 	//Common Constants
 	public static let zero:Point = Point(x:0.0, y:0.0)
@@ -60,6 +64,11 @@ public struct Point : Hashable {
 	///dot product, these points are treated as vectors whose origin is .zero
 	public static func *(lhs:Point, rhs:Point)->SGFloat {
 		return (lhs.x * rhs.x + lhs.y * rhs.y) / (sqrt(lhs.x * lhs.x + lhs.y * lhs.y) * sqrt(rhs.x * rhs.x + rhs.y * rhs.y))
+	}
+	
+	
+	public func crossProductMagnitude(rhs:Point)->SGFloat {
+		return x * rhs.y - y * rhs.x
 	}
 	
 	

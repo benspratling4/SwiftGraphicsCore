@@ -65,7 +65,7 @@ public struct Line {
 	}
 	
 	///if this point is actually ON the line, then it reports the fraction
-	public func intersection(with point:Point, tolerance:SGFloat = 0.0)->SGFloat? {
+	public func intersection(with point:Point, tolerance:SGFloat = 0.0001)->SGFloat? {
 		if Line(point0: point, point1: point0).length <= tolerance {
 			return 0.0
 		}

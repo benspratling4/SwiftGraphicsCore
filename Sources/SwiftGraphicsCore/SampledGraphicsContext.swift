@@ -82,6 +82,7 @@ public class SampledGraphicsContext : GraphicsContext {
 		let inverseTransform:Transform2D = currentState.transformation.inverted
 		//intersect with viewable area
 		var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map {return inverseTransform.transform($0) })
+		affectedRect = affectedRect.outset(uniform: Size(width: lineWidth, height: lineWidth))
 		affectedRect = affectedRect.roundedOut
 		guard let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) else { return }
 		for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
