@@ -566,7 +566,7 @@ public struct PathSegment {
 					, y: ya*t*t*t + yb*t*t + yc*t + yd)
 			}
 			let solutionsCoordinates:[(Point, SGFloat)] = acceptibleSolutions.map({
-				return (position(t:$0), $0)
+				return (postionAndDerivative(from: start, fraction: $0).0, $0)
 			})
 			let inRangePositions:[(Point, SGFloat)] = solutionsCoordinates.filter { pointAndFraction in
 				guard let fraction = line.intersection(with: pointAndFraction.0, tolerance: 0.02) else { return false }

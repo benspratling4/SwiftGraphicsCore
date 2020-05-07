@@ -44,7 +44,7 @@ func realQuadraticRoots(a:SGFloat, b:SGFloat, c:SGFloat)->[SGFloat] {
 
 ///solutions to x for the equation ax^3 + bx^2 + cx + d == 0
 func realCubeRoots(a:SGFloat, b:SGFloat, c:SGFloat, d:SGFloat)->[SGFloat] {
-	if a == 0.0 {
+	if abs(a) <= 0.0000001 {
 		return realQuadraticRoots(a: b, b: c, c: d)
 	}
 	let A:SGFloat = b/a
