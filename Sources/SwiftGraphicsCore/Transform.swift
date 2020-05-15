@@ -38,8 +38,8 @@ public struct Transform2D {
 	///radians, with y going downscreen, positive rotations will look counter-clockwise
 	public init(rotation:SGFloat) {
 		self.a = cos(rotation)
-		self.b = -sin(rotation)
-		self.c = sin(rotation)
+		self.b = sin(rotation)
+		self.c = -sin(rotation)
 		self.d = cos(rotation)
 		self.dx = 0
 		self.dy = 0
@@ -58,9 +58,16 @@ public struct Transform2D {
 		return Point(x: a * point.x + c * point.y + dx, y:b*point.x + d*point.y + dy)
 	}
 	
+	
+	///coordinates will be transformed as in self.concatenate(with:otherTransform).transform(point) ==  otherTransform.transform(self.transform(point))
 	public func concatenate(with otherTransform:Transform2D)->Transform2D {
 		let p2:Transform2D = otherTransform
-		return Transform2D(a: a*p2.a + b*p2.c, b: a*p2.b + b*p2.d, c: c*p2.a + d*p2.c, d:c*p2.a+d*p2.d, dx:dx*p2.a + dy*p2.c + p2.dx, dy: dx*p2.b+dy+p2.d+p2.dy)
+		return Transform2D(a: a*p2.a + b*p2.c
+			,b: a*p2.b + b*p2.d
+			,c: c*p2.a + d*p2.c
+			,d:c*p2.a + d*p2.d
+			,dx:dx*p2.a + dy*p2.c + p2.dx
+			,dy: dx*p2.b + dy*p2.d + p2.dy)
 	}
 	
 	public var inverted:Transform2D {

@@ -75,71 +75,71 @@ public class SampledGraphicsContext : GraphicsContext {
 	private var states:[GraphicsContextState] = [GraphicsContextState()]
 	
 	
-	///color space must match self' color space
-	public func strokePath(_ path:Path, color:SampledColor, lineWidth:SGFloat) {
-		//TODO: make me more efficient by following the bounding boxes of each underlying subpath segment
-		guard let boundingBox:Rect = path.boundingBox else { return }
-		let inverseTransform:Transform2D = currentState.transformation.inverted
-		//intersect with viewable area
-		var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map {return inverseTransform.transform($0) })
-		affectedRect = affectedRect.outset(uniform: Size(width: lineWidth, height: lineWidth))
-		affectedRect = affectedRect.roundedOut
-		guard let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) else { return }
-		for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
-			for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
-				switch antialiasing {
-				case .subsampling(resolution: let resolution):
-					let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
-					let subSamplePixelLocation:[Point] = subSampleLocations.map({ states[states.count-1].transformation.transform($0) })
-					let hitCount:Float32 = Float32(subSamplePixelLocation.filter({ path.isPoint($0, within: lineWidth) }).count)
-					if hitCount <= 0.0 { continue }
-					let antialiasRatio:Float32 = hitCount/Float32(subSampleLocations.count)
-					if underlyingImage.colorSpace.hasAlpha {
-						let underValue:SampledColor = underlyingImage[column, row]
-						underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:[(color, antialiasFactor:antialiasRatio)], over: underValue)
-					} else {
-						underlyingImage[column, row] = color
+	public func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?) {
+		let currentTransform:Transform2D = currentState.transformation
+		let inverseTransform:Transform2D = currentTransform.inverted
+		//improve me by rendering as in a pixel buffer, and then compositing over the original image
+		if let shader = fillShader
+			,let boundingBox:Rect = path.boundingBox {	//use the bounding rects of the subpaths?
+			//TODO: write me
+			
+			//intersect with viewable area
+			var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map {return currentTransform.transform($0) })
+			affectedRect = affectedRect.roundedOut
+			if let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) {
+				for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
+					for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
+						switch antialiasing {
+						case .subsampling(resolution: let resolution):
+							let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
+							let subSamplePixelLocation:[Point] = subSampleLocations.map({ inverseTransform.transform($0) })
+							let hitColors:[SampledColor] = subSamplePixelLocation.compactMap { (point) -> SampledColor? in
+								return !path.contains(point) ? nil : shader.color(at: point)
+							}
+							if hitColors.count == 0 { continue }
+							let antialiasRatio:Float32 = 1.0/Float32(subSampleLocations.count)
+							let allColors:[(SampledColor, antialiasFactor:Float32)] = hitColors.map({ ($0, antialiasRatio) })
+							
+							let underValue:SampledColor = underlyingImage[column, row]
+							underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:allColors, over: underValue)
+				//			case .triangulation:
+				//				//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
+				//				//TODO: write me
+				//				break
+						}
 					}
-//				case .triangulation:
-//					//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
-//					//TODO: write me
-//					break
 				}
 			}
 		}
-	}
-	
-	
-	/// color must already be in self's colorSpace
-	public func fillPath(_ path:Path, color:SampledColor) {
-		//use the bounding rects of the subpaths?
-		guard let boundingBox:Rect = path.boundingBox else { return }
-		let inverseTransform:Transform2D = currentState.transformation.inverted
-		//intersect with viewable area
-		var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map {return inverseTransform.transform($0) })
-		affectedRect = affectedRect.roundedOut
-		guard let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) else { return }
 		
-		for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
-			for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
-				switch antialiasing {
-				case .subsampling(resolution: let resolution):
-					let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
-					let subSamplePixelLocation:[Point] = subSampleLocations.map({ states[states.count-1].transformation.transform($0) })
-					let hitPoints:[Point] = subSamplePixelLocation.filter({ path.contains($0) })
-					let hitCount:Float32 = Float32(hitPoints.count)
-					if hitCount <= 0.0 { continue }
-					let antialiasRatio:Float32 = hitCount/Float32(subSampleLocations.count)
-					if underlyingImage.colorSpace.hasAlpha {
-						let underValue:SampledColor = underlyingImage[column, row]
-						underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:[(color, antialiasFactor:antialiasRatio)], over: underValue)
-					} else {
-						underlyingImage[column, row] = color
+		if let (shader, options) = stroke
+			,let boundingBox:Rect = path.boundingBox {
+			//TODO: make me more efficient by following the bounding boxes of each underlying subpath segment
+			//intersect with viewable area
+			var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map { return currentTransform.transform($0) })
+			affectedRect = affectedRect.outset(uniform: Size(width: options.lineWidth, height: options.lineWidth))
+			affectedRect = affectedRect.roundedOut
+			if let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) {
+				for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
+					for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
+						switch antialiasing {
+						case .subsampling(resolution: let resolution):
+							let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
+							let subSamplePixelLocation:[Point] = subSampleLocations.map({ inverseTransform.transform($0) })
+							let hitColors:[SampledColor] = subSamplePixelLocation.compactMap { (point) -> SampledColor? in
+								return !path.isPoint(point, within: options.lineWidth) ? nil : shader.color(at: point)
+							}
+							if hitColors.count == 0 { continue }
+							let antialiasRatio:Float32 = 1.0/Float32(subSampleLocations.count)
+							let antialiases:[(SampledColor, Float32)] = hitColors.map({ ($0, antialiasFactor:antialiasRatio)})
+							let underValue:SampledColor = underlyingImage[column, row]
+							underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:antialiases, over: underValue)
+		//				case .triangulation:
+		//					//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
+		//					//TODO: write me
+		//					break
+						}
 					}
-//				case .triangulation:
-//					//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
-//					//TODO: write me
-//					break
 				}
 			}
 		}
@@ -223,7 +223,7 @@ public class SampledGraphicsContext : GraphicsContext {
 		func applyTransformation(_ transformation:Transform2D) {
 			guard let context = self.context, context.states.count > 0 else { return }
 			let oldTransformation = context.states[context.states.count-1].transformation
-			let newTransformation = oldTransformation.concatenate(with: transformation)
+			let newTransformation = oldTransformation.concatenate(with:transformation)
 			context.states[context.states.count-1].transformation = newTransformation
 		}
 		

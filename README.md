@@ -24,3 +24,11 @@ Coordinate system assumes x+ to the right, y+ is down the page.  Placing (0,0) i
 Check out `Path`, `SubPath`, `PathSegment`.
 
 Precise algorithms for whether a point is in a SubPath is done, but algorithms for decomposiing the subpaths into sub-pixel triangles is not done.
+
+
+## Bitmap Images
+
+`SampledImage`
+
+
+

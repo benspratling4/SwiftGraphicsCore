@@ -13,11 +13,11 @@ public protocol GraphicsContext : class {
 	
 	var colorSpace:ColorSpace { get }
 	
-	///color should already be in the color space of the context
-	func strokePath(_ path:Path, color:SampledColor, lineWidth:SGFloat)
-	
-	///color should already be in the color space of the context
-	func fillPath(_ path:Path, color:SampledColor)
+	/// fills if fillShader is non-nil
+	/// strokes if stroke is non-nil
+	/// to get a solid color, use SolidColorShader as the Shader
+	/// Shader colors should already be in the color space of the context
+	func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?)
 	
 	///in a SampledGraphicsContext, the colorspaces must match
 	func drawImage(_ image:SampledImage, in rect:Rect)
@@ -36,6 +36,18 @@ public protocol GraphicsContext : class {
 }
 
 
+public struct StrokeOptions {
+	public var cap:Path.LineCap
+	public var join:Path.LineJoin
+	public var lineWidth:SGFloat
+	
+	public init(lineWidth:SGFloat, cap:Path.LineCap = .round, join:Path.LineJoin = .round) {
+		self.lineWidth = lineWidth
+		self.cap = cap
+		self.join = join
+	}
+}
+
 
 public struct GraphicsContextState {
 	
@@ -44,6 +56,7 @@ public struct GraphicsContextState {
 		self.transformation = transformation
 	}
 	
+	///when rendered, a point will appear to be at let apparentCoordiantes:Point = transform.transform(providedCoordinates)
 	///unlike other properties which can be set sparsely, the transformation is always the complete concatenation of all lower transformations
 	public var transformation:Transform2D = .identity
 	//TODO: clipping masks....
