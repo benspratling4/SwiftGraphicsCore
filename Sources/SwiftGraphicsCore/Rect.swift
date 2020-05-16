@@ -99,11 +99,11 @@ public struct Rect : Hashable {
 	
 	public mutating func union(_ point:Point) {
 		if origin.x > point.x {
-			size.width += maxX - point.x
+			size.width = maxX - point.x
 			origin.x = point.x
 		}
 		if origin.y > point.y {
-			size.height += maxY - point.y
+			size.height = maxY - point.y
 			origin.y = point.y
 		}
 		if maxX < point.x {

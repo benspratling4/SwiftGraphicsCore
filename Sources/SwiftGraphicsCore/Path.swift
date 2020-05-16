@@ -7,6 +7,8 @@
 
 import Foundation
 
+//lots of usful stuff https://pomax.github.io/bezierinfo/#derivatives
+
 
 public struct Path {
 	
@@ -401,9 +403,19 @@ public struct PathSegment {
 			//naïve algorithm is to subdivide into 8 smaller cubic segments, treat them as lines
 			let subT:[SGFloat] = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0]
 			let points:[Point] = subT.map({ postionAndDerivative(from:start, fraction:$0).0 })
-			for i in 0..<points.count - 2 {
+			for i in 0..<points.count - 1 {
 				let line = Line(point0: points[i], point1: points[i+1])
-				if line.distanceToNearestPoint(point) <= distance {
+				if Line(point0: line.point0, point1: point).length <= distance {	//round join/cap style
+					return true
+				}
+				if Line(point0: line.point1, point1: point).length <= distance {	//round join/cap style
+					return true
+				}
+				let (foundPoint, fraction) = line.nearestPoint(to: point)
+				if !(0.0...1.0).contains(fraction) {
+					continue
+				}
+				if Line(point0: point, point1: foundPoint).length <= distance {
 					return true
 				}
 			}
