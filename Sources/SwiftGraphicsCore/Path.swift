@@ -218,7 +218,7 @@ public struct SubPath {
 			//check if it's within the distance from a bounding box
 			let fastBoudingRect:Rect = segment.fastBoundingBox(from:lastEnd)
 			if !fastBoudingRect.outset(uniform:Size(width: distance, height: distance)).contains(point) {
-				return false
+				continue
 			}
 			//and a narrower bouding box
 //			let boudingRect:Rect = segment.boundingBox(from:lastEnd)
@@ -494,7 +494,7 @@ public struct PathSegment {
 			}
 			
 			//easy slow algorithm: only split at the first extrema, will re-encounter the other later
-			let (firstSegment, secondSegment) = segment.subDivide(at: divisionSpots[0].fraction, start: start)
+			let (firstSegment, secondSegment) = segment.subDivide(at: divisionSpots[0].fraction, start: preceedingEndPoint)
 			accumulatedSegments.remove(at: index)
 			accumulatedSegments.insert(firstSegment, at: index)
 			accumulatedSegments.insert(secondSegment, at: index+1)
@@ -627,6 +627,19 @@ public struct PathSegment {
 		case .point:
 			return Line(point0: point, point1: end).length <= distance
 		case .line:
+			if point.y - distance > max(start.y, end.y) {
+				return false
+			}
+			if point.x + distance < min(start.x, end.x) {
+				return false
+			}
+			if point.x - distance > max(start.x, end.x) {
+				return false
+			}
+			if point.y + distance < min(start.y, end.y) {
+				return false
+			}
+			
 			let line:Line = Line(point0: start, point1: end)
 			let (nearest, fraction) = line.nearestPoint(to:point)
 			if fraction < 0.0 || fraction > 1.0 {
@@ -659,27 +672,8 @@ public struct PathSegment {
 			return closeEnoughPoints.count > 0
 			
 		case .cubic(let control0, let control1):
-			//TODO: provide an exact algorthm to make curves smooth
-			//naïve algorithm is to subdivide into 8 smaller cubic segments, treat them as lines
-			let subT:[SGFloat] = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0]
-			let points:[Point] = subT.map({ position(from:start, fraction:$0) })
-			for i in 0..<points.count - 1 {
-				let line = Line(point0: points[i], point1: points[i+1])
-				if Line(point0: line.point0, point1: point).length <= distance {	//round join/cap style
-					return true
-				}
-				if Line(point0: line.point1, point1: point).length <= distance {	//round join/cap style
-					return true
-				}
-				let (foundPoint, fraction) = line.nearestPoint(to: point)
-				if !(0.0...1.0).contains(fraction) {
-					continue
-				}
-				if Line(point0: point, point1: foundPoint).length <= distance {
-					return true
-				}
-			}
-			return false
+			return PathSegment(end: end, shape: .line).isPoint(point, within: distance, start: start, cap: cap, join: join)
+			//for now, if you'd like smooth cubic bezier strokes, subdivide the path using .subDivided(linearity:
 		}
 	}
 	

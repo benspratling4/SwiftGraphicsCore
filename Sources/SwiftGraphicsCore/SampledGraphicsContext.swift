@@ -78,13 +78,13 @@ public class SampledGraphicsContext : GraphicsContext {
 	public func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?) {
 		let currentTransform:Transform2D = currentState.transformation
 		let inverseTransform:Transform2D = currentTransform.inverted
-		//improve me by rendering as in a pixel buffer, and then compositing over the original image
-		if let shader = fillShader
-			,let boundingBox:Rect = path.boundingBox {	//use the bounding rects of the subpaths?
-			//TODO: write me
-			switch antialiasing {
-			case .subsampling(resolution: let resolution):
-//				let subdividedPath = path.subDivided(linearity: 0.5/SGFloat(resolution.rawValue)).replacingWithLines()
+		let pathInPixelCoordiantes:Path = currentTransform.transform(path)
+		switch antialiasing {
+		case .subsampling(resolution: let resolution):
+			let subdividedPathInPixelCoordiantes:Path = pathInPixelCoordiantes.subDivided(linearity: 0.5/SGFloat(resolution.rawValue)).replacingWithLines()
+			//improve me by rendering as in a pixel buffer, and then compositing over the original image
+			if let shader = fillShader
+				,let boundingBox:Rect = subdividedPathInPixelCoordiantes.boundingBox {	//use the bounding rects of the subpaths?
 				//intersect with viewable area
 				var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map {return currentTransform.transform($0) })
 				affectedRect = affectedRect.roundedOut
@@ -95,7 +95,7 @@ public class SampledGraphicsContext : GraphicsContext {
 							let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
 							let subSamplePixelLocation:[Point] = subSampleLocations.map({ inverseTransform.transform($0) })
 							let hitColors:[SampledColor] = subSamplePixelLocation.compactMap { (point) -> SampledColor? in
-								return !path.contains(point) ? nil : shader.color(at: point)
+								return !subdividedPathInPixelCoordiantes.contains(point) ? nil : shader.color(at: point)
 							}
 							if hitColors.count == 0 { continue }
 							let antialiasRatio:Float32 = 1.0/Float32(subSampleLocations.count)
@@ -103,24 +103,18 @@ public class SampledGraphicsContext : GraphicsContext {
 							
 							let underValue:SampledColor = underlyingImage[column, row]
 							underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:allColors, over: underValue)
-							//			case .triangulation:
-							//				//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
-							//				//TODO: write me
-							//				break
+							
 						}
 					}
 				}
 			}
-		}
-		
-		if let (shader, options) = stroke
-			,let boundingBox:Rect = path.boundingBox {
-			//TODO: make me more efficient by following the bounding boxes of each underlying subpath segment
-			//intersect with viewable area
-			let halfLineWidth:SGFloat = options.lineWidth/2
-			switch antialiasing {
-			case .subsampling(resolution: let resolution):
-//				let subdividedPath = path.subDivided(linearity: 0.5/SGFloat(resolution.rawValue)).replacingWithLines()
+			let crudeStrokingPath = pathInPixelCoordiantes.subDivided(linearity: 0.5).replacingWithLines()
+			if let (shader, options) = stroke
+				,let boundingBox:Rect = crudeStrokingPath.boundingBox {
+				//TODO: make me more efficient by following the bounding boxes of each underlying subpath segment
+				//intersect with viewable area
+				let halfLineWidth:SGFloat = options.lineWidth/2
+			
 				var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map { return currentTransform.transform($0) })
 				affectedRect = affectedRect.outset(uniform: Size(width: options.lineWidth, height:halfLineWidth))
 				affectedRect = affectedRect.roundedOut
@@ -130,23 +124,22 @@ public class SampledGraphicsContext : GraphicsContext {
 							let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
 							let subSamplePixelLocation:[Point] = subSampleLocations.map({ inverseTransform.transform($0) })
 							let hitColors:[SampledColor] = subSamplePixelLocation.compactMap { (point) -> SampledColor? in
-								return !path.isPoint(point, within: halfLineWidth) ? nil : shader.color(at: point)
+								return !crudeStrokingPath.isPoint(point, within: halfLineWidth) ? nil : shader.color(at: point)
 							}
 							if hitColors.count == 0 { continue }
 							let antialiasRatio:Float32 = 1.0/Float32(subSampleLocations.count)
 							let antialiases:[(SampledColor, Float32)] = hitColors.map({ ($0, antialiasFactor:antialiasRatio)})
 							let underValue:SampledColor = underlyingImage[column, row]
 							underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:antialiases, over: underValue)
-							//				case .triangulation:
-							//					//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
-							//					//TODO: write me
-							//					break
 						}
 					}
 				}
 			}
+//		case .triangulation:
+//			//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
+//			//TODO: write me
+//			break
 		}
-
 	}
 	
 	
