@@ -208,18 +208,10 @@ public struct SubPath {
 			return Rect(origin: .zero, size: .zero)
 		}
 		var bounds:Rect = Rect(origin: segments[0].end, size: .zero)
+		var previousEnd:Point = segments[0].end
 		for segment in segments {
-			bounds.union(segment.end)
-			switch segment.shape {
-			case .quadratic(let control):
-				bounds.union(control)
-				
-			case .cubic(let control0, let control1):
-				bounds.union(control0)
-				bounds.union(control1)
-			default:
-				break
-			}
+			bounds.union(segment.boundingBox(from: previousEnd))
+			previousEnd = segment.end
 		}
 		return bounds
 	}
@@ -282,9 +274,34 @@ public struct PathSegment {
 			return Rect(boundingPoints: [start, end])
 			
 		case .quadratic(let control):
-			return Rect(boundingPoints:[start, control, end])
+			var boundingBox:Rect = Rect(boundingPoints:[start, end])
+			//take the derivative of the polynomial,
+			//add extrema to the bounding box
+			//B' = 2(1-t)*(control - start) + 2*t*(end - control)
+			//2 * (control - start) - 2*(control - start) * t + 2*t*(end - control)
+			//2*((end - control)-(control - start)) * t  + 2 * (control - start)
+			//so B'(t) == 0 at t == -2 * (control - start) /2*((end - control)-(control - start))
+			//so B'(t) == 0 at t == (control - start) /((end - control)-(control - start))
+			let xExtremaDenominator:SGFloat = (end.x - control.x)-(control.x - start.x)
+			if xExtremaDenominator != 0.0 {
+				let tAtxExtrema:SGFloat = -(control.x - start.x) / xExtremaDenominator
+				if (0.0...1.0).contains(tAtxExtrema) {
+					boundingBox.union(postionAndDerivative(from: start, fraction: tAtxExtrema).0)
+				}
+			}
+			let yExtremaDenominator:SGFloat = (end.y - control.y)-(control.y - start.y)
+			if yExtremaDenominator != 0.0 {
+				let tAtyExtrema:SGFloat = -(control.y - start.y) / yExtremaDenominator
+				if (0.0...1.0).contains(tAtyExtrema) {
+					boundingBox.union(postionAndDerivative(from: start, fraction: tAtyExtrema).0)
+				}
+			}
+			
+			return boundingBox
 			
 		case .cubic(let control0, let control1):
+			//TODO: take the derivative of the polynomial,
+			//TODO: add extrema to the bounding box
 			return Rect(boundingPoints:[start, control0, control1, end])
 		}
 	}
@@ -599,3 +616,7 @@ func bezierCoefficients(P0:SGFloat,P1:SGFloat,P2:SGFloat,P3:SGFloat)->(SGFloat, 
 		P0
 	)
 }
+
+
+
+
