@@ -43,7 +43,20 @@ class BezierBoundingBoxTests : XCTestCase {
 	}
 	
 	
+	func testMonolithicCubicBox1() {
+		var path = Path()
+		path.move(to: Point(x: 0.0, y: 50.0))
+		path.addCurve(near: Point(x: 0.0, y: 0.0), and: Point(x: 100.0, y: 0.0), to: Point(x: 100.0, y: 50.0))
+		
+		guard let box = path.boundingBox else {
+			XCTFail("did not create bouding box")
+			return
+		}
+		print(path.subPaths[0].segments[1].position(from: path.subPaths[0].segments[0].end, fraction: 0.23))
+		XCTAssertEqual(box.origin.y, 12.5, accuracy:0.01)
+		XCTAssertEqual(box.size.height, 37.5, accuracy:0.01)
+	}
+	
+	
 	
 }
-
-

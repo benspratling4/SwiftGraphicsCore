@@ -127,7 +127,7 @@ public struct Path {
 		]
 	}
 	
-	
+	///tight box
 	public var boundingBox:Rect? {
 		guard subPaths.count >= 0 else { return nil }
 		var box:Rect = subPaths[0].boundingBox
@@ -136,6 +136,26 @@ public struct Path {
 		}
 		return box
 	}
+	
+	///rect containing all start, end, control points
+	public var fastBoundingBox:Rect? {
+		guard subPaths.count >= 0 else { return nil }
+		var box:Rect = subPaths[0].fastBoundingBox
+		for i in 1..<subPaths.count {
+			box = box.unioning(subPaths[i].fastBoundingBox)
+		}
+		return box
+	}
+	
+	///subdivides each segment until its deviation from a straight line is less than the indicated amount
+	public func subDivided(linearity:SGFloat)->Path {
+		return Path(subPaths: subPaths.map({$0.subDivided(linearity: linearity)}))
+	}
+	
+	///replaces quadratic and cubic segments with lines with the same endpoints
+	public func replacingWithLines()->Path {
+		return Path(subPaths: subPaths.map({$0.replacingWithLines()}))
+	}
 }
 
 
@@ -143,6 +163,10 @@ public struct Path {
 ///Simple Bezier Path
 public struct SubPath {
 	public var segments:[PathSegment] = []
+	
+	internal init(segments:[PathSegment]) {
+		self.segments = segments
+	}
 	
 	//public var closed:Bool = false
 	public init(startingPoint:Point) {
@@ -192,17 +216,22 @@ public struct SubPath {
 				lastEnd = newEnd
 			}
 			//check if it's within the distance from a bounding box
-			let boudingRect:Rect = segment.boundingBox(from:lastEnd)
-			if boudingRect.outset(uniform:Size(width: distance, height: distance)).contains(point) {
+			let fastBoudingRect:Rect = segment.fastBoundingBox(from:lastEnd)
+			if !fastBoudingRect.outset(uniform:Size(width: distance, height: distance)).contains(point) {
+				return false
+			}
+			//and a narrower bouding box
+//			let boudingRect:Rect = segment.boundingBox(from:lastEnd)
+//			if boudingRect.outset(uniform:Size(width: distance, height: distance)).contains(point) {
 				if segment.isPoint(point, within: distance, start: lastEnd, cap: cap, join:join) {
 					return true
 				}
-			}
+//			}
 		}
 		return false
 	}
 	
-	
+	///tight fit
 	public var boundingBox:Rect {
 		if segments.count < 1 {
 			return Rect(origin: .zero, size: .zero)
@@ -216,6 +245,41 @@ public struct SubPath {
 		return bounds
 	}
 	
+	///loose fit, includes control points
+	public var fastBoundingBox:Rect {
+		if segments.count < 1 {
+			return Rect(origin: .zero, size: .zero)
+		}
+		var bounds:Rect = Rect(origin: segments[0].end, size: .zero)
+		var previousEnd:Point = segments[0].end
+		for segment in segments {
+			bounds.union(segment.fastBoundingBox(from: previousEnd))
+			previousEnd = segment.end
+		}
+		return bounds
+	}
+	
+	
+	public func subDivided(linearity:SGFloat)->SubPath {
+		var newSegments:[PathSegment] = []
+		var previousEnd:Point = .zero
+		for segment in segments {
+			newSegments.append(contentsOf: segment.subDivided(from:previousEnd, linearity: linearity))
+			previousEnd = segment.end
+		}
+		return SubPath(segments:newSegments)
+	}
+	
+	
+	public func replacingWithLines()->SubPath {
+		var newSegments:[PathSegment] = []
+		var previousEnd:Point = .zero
+		for segment in segments {
+			newSegments.append(segment.replacingWithLines(from: previousEnd))
+			previousEnd = segment.end
+		}
+		return SubPath(segments:newSegments)
+	}
 	
 	///		///precise calculation, imprecise exclusion provided by the overestimatedConvexHull
 	/// currently assumes the edges are all lines...  oh well.
@@ -266,49 +330,208 @@ public struct PathSegment {
 	
 	
 	public func boundingBox(from start:Point)->Rect {
+		var points:[Point]
 		switch shape {
 		case .point:
-			return Rect(origin: end, size:.zero)
+			points = [end]
 			
+		default:
+			points = [start, end]
+		}
+		points.append(contentsOf: nonTerminalExtrema(from: start).map({ position(from: start, fraction: $0) }))
+		return Rect(boundingPoints: points)
+	}
+	
+	
+	public func fastBoundingBox(from start:Point)->Rect {
+		switch shape {
+		case .point:
+			return Rect(origin: end, size: .zero)
 		case .line:
 			return Rect(boundingPoints: [start, end])
+		case .quadratic(let control):
+			return Rect(boundingPoints: [start, control, end])
+		case .cubic(let control0, let control1):
+			return Rect(boundingPoints: [start, control0, control1, end])
+		}
+	}
+	
+	///returns an array of fractional values of the non-terminal extrema
+	public func nonTerminalExtrema(from start:Point)->[SGFloat] {
+		switch shape {
+		case .point:
+			return []	//never any non-terminal extrema
+			
+		case .line:
+			return []	//never any non-terminal extrema
 			
 		case .quadratic(let control):
-			var boundingBox:Rect = Rect(boundingPoints:[start, end])
-			//take the derivative of the polynomial,
-			//add extrema to the bounding box
-			//B' = 2(1-t)*(control - start) + 2*t*(end - control)
-			//2 * (control - start) - 2*(control - start) * t + 2*t*(end - control)
-			//2*((end - control)-(control - start)) * t  + 2 * (control - start)
-			//so B'(t) == 0 at t == -2 * (control - start) /2*((end - control)-(control - start))
-			//so B'(t) == 0 at t == (control - start) /((end - control)-(control - start))
+			var extrema:[SGFloat] = []
 			let xExtremaDenominator:SGFloat = (end.x - control.x)-(control.x - start.x)
 			if xExtremaDenominator != 0.0 {
 				let tAtxExtrema:SGFloat = -(control.x - start.x) / xExtremaDenominator
-				if (0.0...1.0).contains(tAtxExtrema) {
-					boundingBox.union(postionAndDerivative(from: start, fraction: tAtxExtrema).0)
+				if tAtxExtrema > 0, tAtxExtrema < 1 {
+					extrema.append(tAtxExtrema)
 				}
 			}
 			let yExtremaDenominator:SGFloat = (end.y - control.y)-(control.y - start.y)
 			if yExtremaDenominator != 0.0 {
 				let tAtyExtrema:SGFloat = -(control.y - start.y) / yExtremaDenominator
-				if (0.0...1.0).contains(tAtyExtrema) {
-					boundingBox.union(postionAndDerivative(from: start, fraction: tAtyExtrema).0)
+				if tAtyExtrema > 0, tAtyExtrema < 1 {
+					extrema.append(tAtyExtrema)
 				}
 			}
-			
-			return boundingBox
+			return extrema
 			
 		case .cubic(let control0, let control1):
-			//TODO: take the derivative of the polynomial,
-			//TODO: add extrema to the bounding box
-			return Rect(boundingPoints:[start, control0, control1, end])
+			let (cx3, cx2, cx1, _) = bezierCoefficients(P0: start.x, P1: control0.x, P2: control1.x, P3: end.x)
+			let (cy3, cy2, cy1, _) = bezierCoefficients(P0: start.y, P1: control0.y, P2: control1.y, P3: end.y)
+			let solutions:[SGFloat] = realQuadraticRoots(a: 3.0*cx3, b: 2.0*cx2, c: cx1) + realQuadraticRoots(a: 3.0*cy3, b:2.0*cy2, c: cy1)
+			return solutions.filter({ $0 > 0.0 && $0 < 1.0 })
 		}
 	}
 	
+	public func maxDeviationsFromLinearity(from start:Point)->[(fraction:SGFloat, distance:SGFloat)] {
+		let transformedSegment:PathSegment
+		let unTransformedEnd:Point
+		switch shape {
+		case .point:
+			return []
+		case .line:
+			return []
+		case .quadratic(let control):
+			//create a new segment, aligned to the x axis
+			let centeredEnd:Point = Point(x: end.x-start.x, y: end.y - start.y)
+			//now rotate the path such that the end point lines on y = 0, x >= 0
+			
+			if centeredEnd.x == 0, centeredEnd.y == 0 {
+				//we can't rotate it
+				transformedSegment = PathSegment(end: end - start, shape: .quadratic(control-start))
+				unTransformedEnd = centeredEnd
+			} else {
+				//now find a transformation matrix that rotates that point to y = 0 x >= 0
+				let endMagnitude:SGFloat = sqrt(centeredEnd.x*centeredEnd.x + centeredEnd.y*centeredEnd.y)
+				let normalizedCenteredEnd:Point = centeredEnd / endMagnitude
+				let unRotating:Transform2D = Transform2D(a: normalizedCenteredEnd.x, b: -normalizedCenteredEnd.y, c: normalizedCenteredEnd.y, d: normalizedCenteredEnd.x, dx: 0.0, dy: 0.0)
+				let finalTransform:Transform2D = Transform2D(translateX: -start.x, y: -start.y).concatenate(with: unRotating)
+				let unTransformControl:Point = finalTransform.transform(control)
+				unTransformedEnd = finalTransform.transform(end)
+				transformedSegment = PathSegment(end: unTransformedEnd, shape: .quadratic(unTransformControl))
+			}
+			
+		case .cubic(let control0, let control1):
+			//create a new segment, aligned to the x axis
+			let centeredEnd:Point = Point(x: end.x-start.x, y: end.y - start.y)
+			//now rotate the path such that the end point lines on y = 0, x >= 0
+			
+			if centeredEnd.x == 0, centeredEnd.y == 0 {
+				//we can't rotate it
+				transformedSegment = PathSegment(end: end - start, shape: .cubic(control0 - start, control1-start))
+				unTransformedEnd = centeredEnd
+			} else {
+				//now find a transformation matrix that rotates that point to y = 0 x >= 0
+				let endMagnitude:SGFloat = sqrt(centeredEnd.x*centeredEnd.x + centeredEnd.y*centeredEnd.y)
+				let normalizedCenteredEnd:Point = centeredEnd / endMagnitude
+				let unRotating:Transform2D = Transform2D(a: normalizedCenteredEnd.x, b: -normalizedCenteredEnd.y, c: normalizedCenteredEnd.y, d: normalizedCenteredEnd.x, dx: 0.0, dy: 0.0)
+				let finalTransform:Transform2D = Transform2D(translateX: -start.x, y: -start.y).concatenate(with: unRotating)
+				unTransformedEnd = finalTransform.transform(end)
+				transformedSegment = PathSegment(end: unTransformedEnd, shape: .cubic(finalTransform.transform(control0), finalTransform.transform(control1)))
+			}
+		}
+		
+		//find the extrema
+		let extremaFractions = transformedSegment.nonTerminalExtrema(from: .zero)
+		//the bug is here: we don't want the position, we want the
+		let extrema:[(SGFloat, Point)] = [(0.0, Point(x: 0.0, y: 0.0))] + extremaFractions.map({ ($0, transformedSegment.position(from: .zero, fraction: $0)) })
+		//if x is < 0 or > unTransformedEnd.x, we must include those regardless of y value
+		let xExtrema:[(SGFloat, SGFloat)] = extrema.compactMap({
+			if $0.1.x < 0 {
+				return ($0.0, -$0.1.x)
+			}
+			if $0.1.x > unTransformedEnd.x {
+				return ($0.0, $0.1.x - unTransformedEnd.x)
+			}
+			return nil
+		})
+		
+		//now for all y extrema
+		let allY:[(SGFloat, SGFloat)] = extrema.map({ ($0.0, $0.1.y) })
+		let sortedY:[(SGFloat, SGFloat)] = allY.sorted(by:{ $0.1 < $1.1 })
+		//take the lowest & highest, and then take their absolute values
+		let finalY:[(SGFloat, SGFloat)] = [sortedY.first, sortedY.last].compactMap({ $0 }).map({ ($0.0, abs($0.1)) })
+		//sort from smallest fraction to largest fraction
+		var allMaxima:[(SGFloat, SGFloat)] = (xExtrema + finalY).sorted(by:{ $0.0 < $1.0 }).filter({ $0.0 > 0.0 && $0.0 < 1.0 })
+		//remove duplicates, which is easy, because they are all sorted now
+		var i:Int = 0
+		while i+1 < allMaxima.count {
+			if allMaxima[i].0 == allMaxima[i+1].0 {
+				//remove the one with the smaller maxima
+				if allMaxima[i].1 > allMaxima[i+1].1 {
+					allMaxima.remove(at: i)
+				} else {
+					allMaxima.remove(at: i+1)
+				}
+				continue
+			}
+			i += 1
+		}
+		return allMaxima
+	}
 	
-	public func postion(from start:Point, fraction:SGFloat)->Point {
-		return postionAndDerivative(from: start, fraction: fraction).0
+	//returns an array of PathSegments suitably subdivided until none has maxDeviationsFromLinearity > linearity
+	public func subDivided(from start:Point, linearity:SGFloat)->[PathSegment] {
+		var accumulatedSegments:[PathSegment] = [self]
+		var index:Int = 0
+		var preceedingEndPoint:Point = start
+		while index < accumulatedSegments.count {
+			let segment:PathSegment = accumulatedSegments[index]
+			let fractions:[(fraction:SGFloat, distance:SGFloat)] = segment.maxDeviationsFromLinearity(from: preceedingEndPoint)
+			let divisionSpots:[(fraction:SGFloat, distance:SGFloat)] = fractions.filter({ $0.distance > linearity })
+			if divisionSpots.count == 0 {
+				preceedingEndPoint = segment.end
+				index += 1
+				continue
+			}
+			
+			//easy slow algorithm: only split at the first extrema, will re-encounter the other later
+			let (firstSegment, secondSegment) = segment.subDivide(at: divisionSpots[0].fraction, start: start)
+			accumulatedSegments.remove(at: index)
+			accumulatedSegments.insert(firstSegment, at: index)
+			accumulatedSegments.insert(secondSegment, at: index+1)
+			
+			//TODO: hard fast algorithm: go ahead and split at all the points so we don't bother re-doing this math again
+			let sortedDivisionSpots:[(fraction:SGFloat, distance:SGFloat)] = divisionSpots
+			var previousFraction:SGFloat = 0.0
+			var replacementSegments:[PathSegment] = []
+			//not finished
+		}
+		return accumulatedSegments
+	}
+	
+	public func position(from start:Point, fraction:SGFloat)->Point {
+		switch shape {
+		case .point:
+			return end
+		case .line:
+			let line:Line = Line(point0: start, point1: end)
+			return line.pointAtFraction(fraction)
+			
+		case .quadratic(let control):
+			let controlLine0:Line = Line(point0: start, point1: control)
+			let controlLine1:Line = Line(point0: control, point1: end)
+			let halfStart:Point = controlLine0.pointAtFraction(fraction)
+			let halfEnd:Point = controlLine1.pointAtFraction(fraction)
+			let halfLine:Line = Line(point0: halfStart, point1: halfEnd)
+			let point:Point = halfLine.pointAtFraction(fraction)
+			return point
+			
+		case .cubic(let control0, let control1):
+			let (cx3, cx2, cx1, cx0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.x, P1: control0.x, P2: control1.x, P3: end.x)
+			let (cy3, cy2, cy1, cy0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.y, P1: control0.y, P2: control1.y, P3: end.y)
+			let polynomialX:SGFloat = pow(fraction, 3)*cx3 + pow(fraction, 2)*cx2 + fraction*cx1 + cx0
+			let polynomialY:SGFloat = pow(fraction, 3)*cy3 + pow(fraction, 2)*cy2 + fraction*cy1 + cy0
+			return Point(x: polynomialX, y: polynomialY)
+		}
 	}
 	
 	///returns the point on the segment at the given percentage, and also the direction in which the line is traveling
@@ -339,7 +562,17 @@ public struct PathSegment {
 			let half1:Line = Line(point0: connectorCenter, point1: controlLine1.pointAtFraction(fraction))
 			let finalBar = Line(point0: half0.pointAtFraction(fraction), point1: half1.pointAtFraction(fraction))
 			let point = finalBar.pointAtFraction(fraction)
-			return (point, finalBar.point1 - finalBar.point0)
+			let (cx3, cx2, cx1, cx0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.x, P1: control0.x, P2: control1.x, P3: end.x)
+			let (cy3, cy2, cy1, cy0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.y, P1: control0.y, P2: control1.y, P3: end.y)
+			let polynomialX:SGFloat = pow(fraction, 3)*cx3 + pow(fraction, 2)*cx2 + fraction*cx1 + cx0
+			let polynomialY:SGFloat = pow(fraction, 3)*cy3 + pow(fraction, 2)*cy2 + fraction*cy1 + cy0
+			print(polynomialX - point.x)
+			print(polynomialY - point.y)
+			let deriv = finalBar.point1 - finalBar.point0
+			let polynomialDx = 3*pow(fraction, 2)*cx3 + 2*fraction*cx2 + cx1
+			let polynomialDy = 3*pow(fraction, 2)*cy3 + 2*fraction*cy2 + cy1
+//			print(deriv.crossProductMagnitude(rhs: Point(x: polynomialDx, y: polynomialDy)))
+			return (point, deriv)
 		}
 	}
 	
@@ -377,6 +610,16 @@ public struct PathSegment {
 		}
 	}
 	
+	///if the segment is quadratic or cubic, this replaces it with a line
+	public func replacingWithLines(from start:Point)->PathSegment {
+		switch shape {
+		case .point, .line:
+			return self
+		default:
+			return PathSegment(end: end, shape: .line)
+		}
+	}
+	
 	
 	///assumes all segments are lines, not curves
 	public func isPoint(_ point:Point, within distance:SGFloat, start:Point, cap:Path.LineCap = .round, join:Path.LineJoin = .round)->Bool {
@@ -410,7 +653,7 @@ public struct PathSegment {
 			//solutions are the fractions of the closest points, whereever those are
 			let solutions = realCubeRoots(a: d4, b: 3 * d3, c: d2, d: d1)
 			let acceptibleSolutions = solutions.filter({ 0.0 <= $0 && $0 <= 1.0 })
-			var solvedPoints:[Point] = acceptibleSolutions.map({ postionAndDerivative(from: start, fraction: $0).0 })
+			var solvedPoints:[Point] = acceptibleSolutions.map({ position(from: start, fraction: $0) })
 			solvedPoints.append(contentsOf:[start, end])	//with round cap style, this works, for butt, we need explicit handling of the derviative
 			let closeEnoughPoints:[Point] = solvedPoints.filter { Line(point0: $0, point1: point).length <= distance }
 			return closeEnoughPoints.count > 0
@@ -419,7 +662,7 @@ public struct PathSegment {
 			//TODO: provide an exact algorthm to make curves smooth
 			//naïve algorithm is to subdivide into 8 smaller cubic segments, treat them as lines
 			let subT:[SGFloat] = [0.0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0]
-			let points:[Point] = subT.map({ postionAndDerivative(from:start, fraction:$0).0 })
+			let points:[Point] = subT.map({ position(from:start, fraction:$0) })
 			for i in 0..<points.count - 1 {
 				let line = Line(point0: points[i], point1: points[i+1])
 				if Line(point0: line.point0, point1: point).length <= distance {	//round join/cap style
@@ -563,7 +806,7 @@ public struct PathSegment {
 			let acceptibleRoots:[SGFloat] = roots.filter({ 0 <= $0 || $0 <= 1.0 })
 			
 			let solutionsPositions:[(Point, SGFloat)] = acceptibleRoots.map {
-				return (postionAndDerivative(from: start, fraction: $0).0, $0)
+				return (position(from: start, fraction: $0), $0)
 			}
 			let inRangePositions:[(Point, SGFloat)] = solutionsPositions.filter { pointAndFraction in
 				guard let fraction = line.intersection(with: pointAndFraction.0) else { return false }
@@ -595,7 +838,7 @@ public struct PathSegment {
 					, y: ya*t*t*t + yb*t*t + yc*t + yd)
 			}
 			let solutionsCoordinates:[(Point, SGFloat)] = acceptibleSolutions.map({
-				return (postionAndDerivative(from: start, fraction: $0).0, $0)
+				return (self.position(from: start, fraction: $0), $0)
 			})
 			let inRangePositions:[(Point, SGFloat)] = solutionsCoordinates.filter { pointAndFraction in
 				guard let fraction = line.intersection(with: pointAndFraction.0, tolerance: 0.02) else { return false }

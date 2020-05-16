@@ -25,7 +25,11 @@ extension FloatingPoint {
 func realQuadraticRoots(a:SGFloat, b:SGFloat, c:SGFloat)->[SGFloat] {
 	if a == 0 {
 		//can't divide by 0
-		return []
+		if b == 0 {
+			//can't divide by 0
+			return []
+		}
+		return [-c/b]
 	}
 	let rand:SGFloat = pow(b, 2) - 4 * a * c
 	if rand < 0 {

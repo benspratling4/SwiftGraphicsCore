@@ -58,6 +58,28 @@ public struct Transform2D {
 		return Point(x: a * point.x + c * point.y + dx, y:b*point.x + d*point.y + dy)
 	}
 	
+	public func transform(_ path:Path)->Path {
+		return Path(subPaths: path.subPaths.map({ transform($0) }))
+	}
+	
+	internal func transform(_ subPath:SubPath)->SubPath {
+		return SubPath(segments: subPath.segments.map({ transform($0) }))
+	}
+	
+	internal func transform(_ segment:PathSegment)->PathSegment {
+		switch segment.shape {
+		case .point:
+			return PathSegment.init(end: transform(segment.end), shape: .point)
+		case .line:
+			return PathSegment.init(end: transform(segment.end), shape: .line)
+			
+		case .quadratic(let control):
+			return PathSegment.init(end: transform(segment.end), shape: .quadratic(transform(control)))
+			
+		case .cubic(let control0, let control1):
+			return PathSegment.init(end: transform(segment.end), shape: .cubic(transform(control0), transform(control1)))
+		}
+	}
 	
 	///coordinates will be transformed as in self.concatenate(with:otherTransform).transform(point) ==  otherTransform.transform(self.transform(point))
 	public func concatenate(with otherTransform:Transform2D)->Transform2D {
