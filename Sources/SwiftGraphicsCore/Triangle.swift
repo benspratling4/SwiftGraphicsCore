@@ -168,23 +168,53 @@ extension Line {
 	}
 	
 	public func fractionOfSegmentIntersection(with line:Line)->SGFloat? {
-		//determine if there is an intersection
-		if Triangle(point0: point0, point1: point1, point2: line.point0).isRightHanded == Triangle(point0: point0, point1: point1, point2: line.point1).isRightHanded {
-			return nil
+		//based on https://stackoverflow.com/questions/563198/how-do-you-detect-where-two-line-segments-intersect
+		let p:Point = point0
+		let r:Point = point1 - point0
+		let q:Point = line.point0
+		let s:Point = line.point1 - line.point0
+		let rCrossS:SGFloat = r.crossProductMagnitude(rhs: s)
+		let qMinusP:Point = q-p
+		let qMinusPCrossR:SGFloat = qMinusP.crossProductMagnitude(rhs: r)
+		if rCrossS == 0.0 {
+			if qMinusPCrossR != 0 {
+				//parallel, non intersecting
+				return nil
+			}
+			//Collinear, express line as an interval on self & look for overlap
+			let rDotR:SGFloat = r*r
+			let t0:SGFloat = qMinusP*r / rDotR
+			let t1:SGFloat = (q+s-p)*r / rDotR
+			if s*r < 0 {
+				//check if t1...t0 intersects [0, 1]
+				if t1 > 1 {
+					return nil
+				}
+				if t0 < 0 {
+					return nil
+				}
+//				let intersectionBottom = max(t1, 0)
+				let intersectionTop = min(1, t0)
+				return intersectionTop
+			}
+			//check if t0...t1 intersects [0, 1]
+			if t0 > 1 {
+				return nil
+			}
+			if t1 < 0 {
+				return nil
+			}
+//			let intersectionBottom = max(to, 0)
+			let intersectionTop = min(1, t1)
+			return intersectionTop
 		}
-		if Triangle(point0: line.point0, point1: line.point1, point2: point0).isRightHanded == Triangle(point0: line.point0, point1: line.point1, point2: point1).isRightHanded {
-			return nil
+		let t:SGFloat = qMinusP.crossProductMagnitude(rhs: s)/rCrossS
+		let u:SGFloat = qMinusPCrossR/rCrossS
+		if t >= 0.0, t <= 1.0, u >= 0.0, u <= 1 {
+			return t
 		}
-		
-		//compute the intersection
-		
-		let u:Point = Point(x:point1.x - point0.x, y:point1.y - point0.y)
-		let v:Point = Point(x:line.point1.x - line.point0.x, y:line.point1.y - line.point0.y)
-		let w:Point = Point(x:point0.x - line.point0.x, y:point0.y - line.point0.y)
-		
-		let scalar:SGFloat = (((v.y)*(w.x)) - ((v.x)*(w.y))) / (((v.x)*(u.y)) - ((v.y)*(u.x)))
-		if scalar.isNaN || scalar.isInfinite { return nil }
-		return scalar
+		//not parallel, not intersecting
+		return nil
 	}
 }
 

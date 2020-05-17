@@ -34,6 +34,14 @@ public struct Line {
 		return point
 	}
 	
+	///guarantees they intersects somewhere between the points
+	public func intersects(_ otherLine:Line)->Bool {
+		guard let (_, fraction):(Point, SGFloat) = intersectionWithLine(otherLine) else {
+			return false
+		}
+		return fraction >= 0.0 && fraction <= 1.0
+	}
+	
 	///If slopes are equal, but not coincident, there is no intersection
 	///since the intended application is looking for generally perpendicular lines, this math case is not considered
 	public func intersectionWithLine(_ otherLine:Line)->(Point, SGFloat)? {
@@ -91,7 +99,7 @@ public struct Line {
 		return Line(point0: point, point1: foundPoint).length
 	}
 	
-	public enum AngularDirection {
+	public enum AngularDirection : Equatable {
 		case clockwise, same, counterclockwise
 		
 		public static prefix func -(lhs:AngularDirection)->AngularDirection {

@@ -46,6 +46,7 @@ public class SampledGraphicsContext : GraphicsContext {
 		}
 	}
 	
+	//well, that's useless...
 	private func updateSubSampledPixels() {
 		guard case .subsampling(resolution:let resolution) = antialiasing else {
 			subsampledPixelTemplates = [Point(x: 0.5, y: 0.5)]
@@ -71,43 +72,111 @@ public class SampledGraphicsContext : GraphicsContext {
 		}) ?? [Point(x: SGFloat(column)+0.5, y: SGFloat(row)+0.5)]
 	}
 	
-	
 	private var states:[GraphicsContextState] = [GraphicsContextState()]
-	
 	
 	public func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?) {
 		let currentTransform:Transform2D = currentState.transformation
 		let inverseTransform:Transform2D = currentTransform.inverted
 		let pathInPixelCoordiantes:Path = currentTransform.transform(path)
+		
 		switch antialiasing {
 		case .subsampling(resolution: let resolution):
+			
+			let subsampleHeight:SGFloat = 1.0/SGFloat(resolution.rawValue)
+			let subsampleOffset:SGFloat = subsampleHeight/2.0
 			let subdividedPathInPixelCoordiantes:Path = pathInPixelCoordiantes.subDivided(linearity: 0.5/SGFloat(resolution.rawValue)).replacingWithLines()
 			//improve me by rendering as in a pixel buffer, and then compositing over the original image
 			if let shader = fillShader
-				,let boundingBox:Rect = subdividedPathInPixelCoordiantes.boundingBox {	//use the bounding rects of the subpaths?
+				,let boundingBox:Rect = subdividedPathInPixelCoordiantes.boundingBox?.roundedOut
+				,let affectedDrawingArea = boundingBox.intersection(with: Rect(origin: .zero, size: size)) {	//use the bounding rects of the subpaths?
 				//intersect with viewable area
-				var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map {return currentTransform.transform($0) })
-				affectedRect = affectedRect.roundedOut
-				if let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) {
-					for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
-						for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
-							
-							let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
-							let subSamplePixelLocation:[Point] = subSampleLocations.map({ inverseTransform.transform($0) })
-							let hitColors:[SampledColor] = subSamplePixelLocation.compactMap { (point) -> SampledColor? in
-								return !subdividedPathInPixelCoordiantes.contains(point) ? nil : shader.color(at: point)
+				let rows:[Int] = (Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY)).map({ $0 })
+				let subSampleIndexes:[SGFloat] = (0..<resolution.rawValue).map({ $0 }).map({ SGFloat($0) })
+				let subsampledYCoordinatesByPixel:[[SGFloat]] = rows.map({ (y)->[SGFloat] in
+					return subSampleIndexes.map({ subSampleI in
+						return SGFloat(y) + subsampleOffset + (subSampleI * subsampleHeight)
+					})
+				})
+				let subsampledYCoordinates:[SGFloat] = subsampledYCoordinatesByPixel.flatMap({$0})
+				
+				//go ahead and compute all the x values, too
+				let columns:[Int] = (Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX)).map({ $0 })
+				let subsampledXCoordinatesByPixel:[[SGFloat]] = columns.map({ (x)->[SGFloat] in
+					return subSampleIndexes.map({ subSampleI in
+						return SGFloat(x) + subsampleOffset + (subSampleI * subsampleHeight)
+					})
+				})
+				let subsampledXCoordinates:[SGFloat] = subsampledXCoordinatesByPixel.flatMap({$0})
+				
+				//for the first x coordinate, fill the crossing buffer with the number of crossings from negative x infinity at that point
+				var preCrossingsBuffer:[Int] = [Int](repeating: 0, count: subsampledYCoordinates.count)
+				for (i, y) in subsampledYCoordinates.enumerated() {
+					if path.contains(Point(x: affectedDrawingArea.origin.x, y: y)) {
+						preCrossingsBuffer[i] = 1
+					}
+					//the rest are 0, it's ok, because mod works negative, too  :crossfingers:
+				}
+				
+				//make a giant grid of Int's, one for each subpixel
+				//then for each line segment, iterateIntersectedSubPixelCoordinates(subdivision:..., incrementing the subpixel for which it falls into
+				//then for each horizontal line, scan across leaving the sum of all preceeding counts, starting with
+				let subPixelWidth:Int = subsampledXCoordinates.count
+				var allSubPixelCrossings:[Int] = [Int](repeating: 0, count: subsampledXCoordinates.count * subsampledYCoordinates.count)
+				//increment the counts in allSubPixelCrossings for each line's crossing
+				for subPath in subdividedPathInPixelCoordiantes.subPaths {
+					var previousCoord:Point = .zero
+					for segment in subPath.segments {
+						switch segment.shape {
+						case .point:
+							break
+						default:
+							let line = Line(point0: previousCoord, point1: segment.end)
+							line.iterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea) { (subPixelx, subPixelY) in
+								allSubPixelCrossings[subPixelY * subPixelWidth + subPixelx] += 1
 							}
-							if hitColors.count == 0 { continue }
-							let antialiasRatio:Float32 = 1.0/Float32(subSampleLocations.count)
-							let allColors:[(SampledColor, antialiasFactor:Float32)] = hitColors.map({ ($0, antialiasRatio) })
-							
-							let underValue:SampledColor = underlyingImage[column, row]
-							underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:allColors, over: underValue)
-							
 						}
+						previousCoord = segment.end
+					}
+				}
+				
+				//now replace each entry of the sum of all the ones before it
+				for row in 0..<subsampledYCoordinates.count {
+					var previousSum:Int = preCrossingsBuffer[row]
+					for column in 0..<subPixelWidth {
+						let newSum:Int = previousSum + allSubPixelCrossings[row * subPixelWidth + column]
+						allSubPixelCrossings[row * subPixelWidth + column] = newSum
+						previousSum = newSum
+					}
+				}
+				
+				//TODO: now every cell with an even number does not have the fill, and every one with an odd number has the fill
+				//for each pixel, get the counts of each sub pixel,
+				let antialiasDilutionRatio:Float = 1.0/Float(resolution.rawValue*resolution.rawValue)
+				for (rowIndex, row) in rows.enumerated() {
+					for (columnIndex, column) in columns.enumerated() {
+						//access each subpixel
+						var hitColors:[SampledColor]  = []
+						for subPixelx in 0..<resolution.rawValue {
+							for subPixelY in 0..<resolution.rawValue {
+								let subPixelCoordX = columnIndex*resolution.rawValue + subPixelx
+								let subPixelCoordY = rowIndex*resolution.rawValue + subPixelY
+								let crossingCount:Int = allSubPixelCrossings[subPixelCoordY * subPixelWidth + subPixelCoordX]
+								if crossingCount%2 > 0 {
+									let coordinate = Point(x: subsampledXCoordinates[subPixelCoordX], y: subsampledYCoordinates[subPixelCoordY])
+									hitColors.append(shader.color(at: coordinate))
+								}
+							}
+						}
+						
+						if hitColors.count == 0 { continue }
+						let allColors:[(SampledColor, antialiasFactor:Float32)] = hitColors.map({ ($0, antialiasDilutionRatio) })
+						let underValue:SampledColor = underlyingImage[column, row]
+						underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:allColors, over: underValue)
 					}
 				}
 			}
+			
+			
 			let crudeStrokingPath = pathInPixelCoordiantes.subDivided(linearity: 0.5).replacingWithLines()
 			if let (shader, options) = stroke
 				,let boundingBox:Rect = crudeStrokingPath.boundingBox {
@@ -319,3 +388,7 @@ public class SampledGraphicsContext : GraphicsContext {
 	
 	
 }
+
+
+
+
