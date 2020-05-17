@@ -57,10 +57,16 @@ public struct Transform2D {
 	
 	///x and y are angles in radians
 	///center is the (0,0) of the current coordinate system
+	public init(skewAngleX:SGFloat, y:SGFloat) {
+		self.init(skewX: tan(skewAngleX), y: tan(y))
+	}
+	
+	///x and y are change in x or y per other unit
+	///center is the (0,0) of the current coordinate system
 	public init(skewX:SGFloat, y:SGFloat) {
 		self.a = 1
-		self.b = tan(y)
-		self.c = tan(skewX)
+		self.b = y
+		self.c = skewX
 		self.d = 1
 		self.dx = 0.0
 		self.dy = 0.0
