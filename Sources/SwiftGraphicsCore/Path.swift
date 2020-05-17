@@ -115,7 +115,12 @@ public struct Path {
 		subPaths[subPaths.count-1].close()
 	}
 	
+	@available(*, deprecated, renamed: "byClosing")
 	public func byCLosing()->Path {
+		return byClosing()
+	}
+	
+	public func byClosing()->Path {
 		var newPath = self
 		newPath.close()
 		return newPath

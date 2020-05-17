@@ -121,6 +121,7 @@ public class SampledGraphicsContext : GraphicsContext {
 				//then for each line segment, iterateIntersectedSubPixelCoordinates(subdivision:..., incrementing the subpixel for which it falls into
 				//then for each horizontal line, scan across leaving the sum of all preceeding counts, starting with
 				let subPixelWidth:Int = subsampledXCoordinates.count
+				//FIXME: since all we need to know if whether it's even or odd, we can use a single bit for each subpixel
 				var allSubPixelCrossings:[Int] = [Int](repeating: 0, count: subsampledXCoordinates.count * subsampledYCoordinates.count)
 				//increment the counts in allSubPixelCrossings for each line's crossing
 				for subPath in subdividedPathInPixelCoordiantes.subPaths {
@@ -163,15 +164,15 @@ public class SampledGraphicsContext : GraphicsContext {
 								let crossingCount:Int = allSubPixelCrossings[subPixelCoordY * subPixelWidth + subPixelCoordX]
 								if crossingCount%2 > 0 {
 									let coordinate = Point(x: subsampledXCoordinates[subPixelCoordX], y: subsampledYCoordinates[subPixelCoordY])
-									hitColors.append(shader.color(at: coordinate))
+									hitColors.append(shader.color(at: coordinate))	//20% of time is on this line
 								}
 							}
 						}
 						
 						if hitColors.count == 0 { continue }
-						let allColors:[(SampledColor, antialiasFactor:Float32)] = hitColors.map({ ($0, antialiasDilutionRatio) })
+						let allColors:[(SampledColor, antialiasFactor:Float32)] = hitColors.map({ ($0, antialiasDilutionRatio) })	//15% of time here
 						let underValue:SampledColor = underlyingImage[column, row]
-						underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:allColors, over: underValue)
+						underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:allColors, over: underValue)	//10% of time here
 					}
 				}
 			}
