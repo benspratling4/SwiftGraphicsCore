@@ -36,6 +36,7 @@ public struct Transform2D {
 	}
 	
 	///radians, with y going downscreen, positive rotations will look counter-clockwise
+	///center is the (0,0) of the current coordinate system
 	public init(rotation:SGFloat) {
 		self.a = cos(rotation)
 		self.b = sin(rotation)
@@ -52,6 +53,17 @@ public struct Transform2D {
 		self.d = 1
 		self.dx = translateX
 		self.dy = y
+	}
+	
+	///x and y are angles in radians
+	///center is the (0,0) of the current coordinate system
+	public init(skewX:SGFloat, y:SGFloat) {
+		self.a = 1
+		self.b = tan(y)
+		self.c = tan(skewX)
+		self.d = 1
+		self.dx = 0.0
+		self.dy = 0.0
 	}
 	
 	public func transform(_ point:Point)->Point {
