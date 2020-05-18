@@ -84,7 +84,10 @@ public class SampledGraphicsContext : GraphicsContext {
 			
 			let subsampleHeight:SGFloat = 1.0/SGFloat(resolution.rawValue)
 			let subsampleOffset:SGFloat = subsampleHeight/2.0
-			let subdividedPathInPixelCoordiantes:Path = pathInPixelCoordiantes.subDivided(linearity: 0.5/SGFloat(resolution.rawValue)).replacingWithLines()
+			let subdividedPathInPixelCoordiantes:Path = pathInPixelCoordiantes
+				.subDivided(linearity: 0.5/SGFloat(resolution.rawValue))
+				.replacingWithLines()
+				.explicitlyClosingAllSubpaths()
 			//improve me by rendering as in a pixel buffer, and then compositing over the original image
 			if let shader = fillShader
 				,let boundingBox:Rect = subdividedPathInPixelCoordiantes.boundingBox?.roundedOut
@@ -111,7 +114,7 @@ public class SampledGraphicsContext : GraphicsContext {
 				//for the first x coordinate, fill the crossing buffer with the number of crossings from negative x infinity at that point
 				var preCrossingsBuffer:[Int] = [Int](repeating: 0, count: subsampledYCoordinates.count)
 				for (i, y) in subsampledYCoordinates.enumerated() {
-					if path.contains(Point(x: affectedDrawingArea.origin.x, y: y)) {
+					if subdividedPathInPixelCoordiantes.contains(Point(x: affectedDrawingArea.origin.x, y: y)) {
 						preCrossingsBuffer[i] = 1
 					}
 					//the rest are 0, it's ok, because mod works negative, too  :crossfingers:

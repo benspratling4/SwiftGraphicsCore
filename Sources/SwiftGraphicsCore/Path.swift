@@ -161,6 +161,12 @@ public struct Path {
 	public func replacingWithLines()->Path {
 		return Path(subPaths: subPaths.map({$0.replacingWithLines()}))
 	}
+	
+	///if any subpath has an end coordinate that is not the start coordinate, this closes it
+	///this is necessary for, for instance, fill algorithms which require explicit segments on the close line
+	public func explicitlyClosingAllSubpaths()->Path {
+		return Path(subPaths: subPaths.map({ $0.byExplicitlyClosing() }))
+	}
 }
 
 
@@ -285,6 +291,16 @@ public struct SubPath {
 		}
 		return SubPath(segments:newSegments)
 	}
+	
+	public func byExplicitlyClosing()->SubPath {
+		guard segments.count > 1 else { return self }
+		guard segments[0].end != segments.last!.end else { return self }
+		var newSegments = segments
+		newSegments.append(.init(end: segments[0].end, shape: .line))
+		return SubPath(segments: newSegments)
+	}
+	
+	
 	
 	///		///precise calculation, imprecise exclusion provided by the overestimatedConvexHull
 	/// currently assumes the edges are all lines...  oh well.
@@ -437,7 +453,7 @@ public struct PathSegment {
 				//now find a transformation matrix that rotates that point to y = 0 x >= 0
 				let endMagnitude:SGFloat = sqrt(centeredEnd.x*centeredEnd.x + centeredEnd.y*centeredEnd.y)
 				let normalizedCenteredEnd:Point = centeredEnd / endMagnitude
-				let unRotating:Transform2D = Transform2D(a: normalizedCenteredEnd.x, b: -normalizedCenteredEnd.y, c: normalizedCenteredEnd.y, d: normalizedCenteredEnd.x, dx: 0.0, dy: 0.0)
+				let unRotating:Transform2D = Transform2D(a: normalizedCenteredEnd.x, b: normalizedCenteredEnd.y, c: -normalizedCenteredEnd.y, d: normalizedCenteredEnd.x, dx: 0.0, dy: 0.0)
 				let finalTransform:Transform2D = Transform2D(translateX: -start.x, y: -start.y).concatenate(with: unRotating)
 				unTransformedEnd = finalTransform.transform(end)
 				transformedSegment = PathSegment(end: unTransformedEnd, shape: .cubic(finalTransform.transform(control0), finalTransform.transform(control1)))
@@ -503,6 +519,7 @@ public struct PathSegment {
 			accumulatedSegments.remove(at: index)
 			accumulatedSegments.insert(firstSegment, at: index)
 			accumulatedSegments.insert(secondSegment, at: index+1)
+			//we do not increment index and do not set preceedingEndPoint because we will re-consider firstSegment in the next loop
 			
 			//TODO: hard fast algorithm: go ahead and split at all the points so we don't bother re-doing this math again
 			let sortedDivisionSpots:[(fraction:SGFloat, distance:SGFloat)] = divisionSpots

@@ -7,6 +7,12 @@
 
 import Foundation
 
+
+
+///Represents an affine transform using homogenous coordinates
+/// [ a  b  dx ]   [x]
+/// [ c  d  dy ] • [y]
+/// [ 0  0  1  ]   [1]
 public struct Transform2D {
 	public var a:SGFloat
 	public var b:SGFloat
@@ -39,8 +45,8 @@ public struct Transform2D {
 	///center is the (0,0) of the current coordinate system
 	public init(rotation:SGFloat) {
 		self.a = cos(rotation)
-		self.b = sin(rotation)
-		self.c = -sin(rotation)
+		self.b = -sin(rotation)
+		self.c = sin(rotation)
 		self.d = cos(rotation)
 		self.dx = 0
 		self.dy = 0
@@ -73,7 +79,7 @@ public struct Transform2D {
 	}
 	
 	public func transform(_ point:Point)->Point {
-		return Point(x: a * point.x + c * point.y + dx, y:b*point.x + d*point.y + dy)
+		return Point(x: a * point.x + b * point.y + dx, y:c*point.x + d*point.y + dy)
 	}
 	
 	public func transform(_ path:Path)->Path {
@@ -100,23 +106,25 @@ public struct Transform2D {
 	}
 	
 	///coordinates will be transformed as in self.concatenate(with:otherTransform).transform(point) ==  otherTransform.transform(self.transform(point))
+	///in other words if you have the matrix equation v = M A x, then that's v = A.concatenate(M).transform(x) 
 	public func concatenate(with otherTransform:Transform2D)->Transform2D {
-		let p2:Transform2D = otherTransform
-		return Transform2D(a: a*p2.a + b*p2.c
-			,b: a*p2.b + b*p2.d
-			,c: c*p2.a + d*p2.c
-			,d:c*p2.a + d*p2.d
-			,dx:dx*p2.a + dy*p2.c + p2.dx
-			,dy: dx*p2.b + dy*p2.d + p2.dy)
+		let m:Transform2D = otherTransform
+		return Transform2D(a: m.a * a + m.b*c
+			,b: m.a*b + m.b*d
+			,c: m.c*a + m.d*c
+			,d: m.c*b + m.d*d
+			,dx: m.a*dx + m.b*dy + m.dx
+			,dy: m.c*dx + m.d*dy + m.dy)
 	}
 	
 	public var inverted:Transform2D {
-		let det:SGFloat = a*d-b*c
-		var intermediate:Transform2D = Transform2D(a: d/det, b: -b/det, c: -c/det, d: a/det, dx: 0.0, dy: 0.0)
-		let invertedOffset = intermediate.transform(-Point(x: dx, y: dy))
-		intermediate.dx = invertedOffset.x
-		intermediate.dy = invertedOffset.y
-		return intermediate
+		let determinant:SGFloat = a*d - b*c
+		return Transform2D(a: d / determinant
+			,b: -b/determinant
+			,c: -c/determinant
+			,d: a/determinant
+			,dx:(b*dy - d*dx)/determinant
+			,dy:(c*dx - a*dy)/determinant)
 	}
 	
 }
