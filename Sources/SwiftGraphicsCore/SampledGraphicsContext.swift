@@ -389,9 +389,16 @@ public class SampledGraphicsContext : GraphicsContext {
 	}
 	
 	
+	public func drawText(_ text:String, font:RenderingFont, fillShader:Shader?, stroke:(Shader, StrokeOptions)?) {
+		let glyphsIndexes:[Int] = font.gylphIndexes(text: text)
+		let advances:[SGFloat] = font.glyphAdvances(indices: glyphsIndexes)
+		let glyphs:[Path] = glyphsIndexes.map({ font.path(glyphIndex: $0) })
+		
+		var coord:Point = Point(x: 0.0, y: 0.0)
+		for (i, glyph) in glyphs.enumerated() {
+			drawPath(Transform2D(translateX: coord.x, y: coord.y).transform(glyph), fillShader: fillShader, stroke: stroke)
+			coord.x += advances[i]
+		}
+	}
 	
 }
-
-
-
-

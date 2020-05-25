@@ -19,6 +19,10 @@ public protocol GraphicsContext : class {
 	/// Shader colors should already be in the color space of the context
 	func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?)
 	
+	///you can obtain a rendering font from a font
+	///text is always drawn at (0,0) along the x axis, so if that's not what you want, adjust your transformation matrix first
+	func drawText(_ text:String, font:RenderingFont, fillShader:Shader?, stroke:(Shader, StrokeOptions)?)
+	
 	///in a SampledGraphicsContext, the colorspaces must match
 	func drawImage(_ image:SampledImage, in rect:Rect)
 	

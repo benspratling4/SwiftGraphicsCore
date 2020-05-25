@@ -54,7 +54,7 @@ public protocol Font {
 
 
 ///this is a place where you can cache renderings of a font at a given size, or precompute some cvt values
-public protocol RenderingFont {
+public protocol RenderingFont : class {
 	var font:Font { get }
 	
 	var optionValues:[FontOptionValue] { get }
@@ -73,7 +73,7 @@ public protocol RenderingFont {
 }
 
 
-///caches a particular font
+///caches a particular font's glyph sub-sub sample resolutions for later drawing
 class SampledFontCache {
 	
 	//key is glyph index
