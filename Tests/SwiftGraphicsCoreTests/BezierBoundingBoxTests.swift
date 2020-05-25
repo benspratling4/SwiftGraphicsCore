@@ -52,7 +52,7 @@ class BezierBoundingBoxTests : XCTestCase {
 			XCTFail("did not create bouding box")
 			return
 		}
-		print(path.subPaths[0].segments[1].position(from: path.subPaths[0].segments[0].end, fraction: 0.23))
+		print(path.subPaths[0].segments[0].position(from: path.subPaths[0].start, fraction: 0.23))
 		XCTAssertEqual(box.origin.y, 12.5, accuracy:0.01)
 		XCTAssertEqual(box.size.height, 37.5, accuracy:0.01)
 	}

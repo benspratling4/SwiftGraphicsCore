@@ -68,7 +68,7 @@ public struct Path {
 	}
 	
 	public mutating func move(to point:Point) {
-		subPaths.append(SubPath(startingPoint: point))
+		subPaths.append(SubPath(start: point))
 	}
 	
 	public func byMoving(to point:Point)->Path {
@@ -115,11 +115,6 @@ public struct Path {
 		subPaths[subPaths.count-1].close()
 	}
 	
-	@available(*, deprecated, renamed: "byClosing")
-	public func byCLosing()->Path {
-		return byClosing()
-	}
-	
 	public func byClosing()->Path {
 		var newPath = self
 		newPath.close()
@@ -134,7 +129,7 @@ public struct Path {
 	
 	///tight box
 	public var boundingBox:Rect? {
-		guard subPaths.count >= 0 else { return nil }
+		guard subPaths.count > 0 else { return nil }
 		var box:Rect = subPaths[0].boundingBox
 		for i in 1..<subPaths.count {
 			box = box.unioning(subPaths[i].boundingBox)
@@ -170,19 +165,16 @@ public struct Path {
 }
 
 
-
 ///Simple Bezier Path
 public struct SubPath {
+	public var start:Point
 	public var segments:[PathSegment] = []
-	
-	internal init(segments:[PathSegment]) {
+	public var closed:Bool
+	//in the next breaking version, remove the .point shape, and always have a start point for a SubPath, then introduce a boolean for whether the subPath is closed.
+	public init(start:Point, segments:[PathSegment] = [], closed:Bool = false) {
+		self.start = start
 		self.segments = segments
-	}
-	
-	//public var closed:Bool = false
-	public init(startingPoint:Point) {
-		segments = [.init(end: startingPoint, shape: .point)]
-	//	closed = false
+		self.closed = closed
 	}
 	
 	public mutating func addLine(to point:Point) {
@@ -198,30 +190,26 @@ public struct SubPath {
 	}
 	
 	public mutating func close() {
-		guard let startPoint = segments.first?.end else { return }
-		addLine(to: startPoint)
+		closed = true
 	}
 	
 	public init(inRect:Rect) {
-		segments = [.init(end: inRect.origin, shape: .point)
-			,.init(end: inRect.origin + Point(x: inRect.size.width, y: 0.0), shape: .line)
+		start = inRect.origin
+		segments = [
+			.init(end: inRect.origin + Point(x: inRect.size.width, y: 0.0), shape: .line)
 			,.init(end: inRect.origin + Point(x: inRect.size.width, y: inRect.size.height), shape: .line)
 			,.init(end: inRect.origin + Point(x: 0.0, y: inRect.size.height), shape: .line)
-			,.init(end: inRect.origin, shape: .line)
 		]
+		closed = true
 	}
 	
-	///does not assume path is closed
 	public func isPoint(_ point:Point, within distance:SGFloat, cap:Path.LineCap = .round, join:Path.LineJoin = .round)->Bool {
-		if segments.count == 0 {
-			return false
+		if Line(point0: start, point1: point).length <= distance {
+			//assumes cap == .round
+			return true
 		}
-		if segments.count == 1 {
-			return Line(point0: segments[0].end, point1: point).length <= distance
-		}
-		var lastEnd:Point = segments[0].end
-		for i in 1..<segments.count {
-			let segment:PathSegment = segments[i]
+		var lastEnd:Point = start
+		for segment in segments {
 			let newEnd:Point = segment.end
 			defer {
 				lastEnd = newEnd
@@ -239,16 +227,17 @@ public struct SubPath {
 				}
 //			}
 		}
+		if closed, let lastSegmentEnd:Point = segments.last?.end {
+			let fauxSegment = PathSegment(end: start, shape: .line)
+			return fauxSegment.isPoint(point, within: distance, start: lastSegmentEnd, cap: cap, join: join)
+		}
 		return false
 	}
 	
 	///tight fit
 	public var boundingBox:Rect {
-		if segments.count < 1 {
-			return Rect(origin: .zero, size: .zero)
-		}
-		var bounds:Rect = Rect(origin: segments[0].end, size: .zero)
-		var previousEnd:Point = segments[0].end
+		var bounds:Rect = Rect(origin: start, size: .zero)
+		var previousEnd:Point = start
 		for segment in segments {
 			bounds.union(segment.boundingBox(from: previousEnd))
 			previousEnd = segment.end
@@ -258,11 +247,8 @@ public struct SubPath {
 	
 	///loose fit, includes control points
 	public var fastBoundingBox:Rect {
-		if segments.count < 1 {
-			return Rect(origin: .zero, size: .zero)
-		}
-		var bounds:Rect = Rect(origin: segments[0].end, size: .zero)
-		var previousEnd:Point = segments[0].end
+		var bounds:Rect = Rect(origin: start, size: .zero)
+		var previousEnd:Point = start
 		for segment in segments {
 			bounds.union(segment.fastBoundingBox(from: previousEnd))
 			previousEnd = segment.end
@@ -273,31 +259,33 @@ public struct SubPath {
 	
 	public func subDivided(linearity:SGFloat)->SubPath {
 		var newSegments:[PathSegment] = []
-		var previousEnd:Point = .zero
+		var previousEnd:Point = start
 		for segment in segments {
 			newSegments.append(contentsOf: segment.subDivided(from:previousEnd, linearity: linearity))
 			previousEnd = segment.end
 		}
-		return SubPath(segments:newSegments)
+		return SubPath(start:start, segments:newSegments, closed:closed)
 	}
 	
 	
 	public func replacingWithLines()->SubPath {
 		var newSegments:[PathSegment] = []
-		var previousEnd:Point = .zero
+		var previousEnd:Point = start
 		for segment in segments {
 			newSegments.append(segment.replacingWithLines(from: previousEnd))
 			previousEnd = segment.end
 		}
-		return SubPath(segments:newSegments)
+		if closed, previousEnd != start {
+			newSegments.append(PathSegment(end: start, shape: .line))
+		}
+		return SubPath(start:start, segments:newSegments, closed: closed)
 	}
 	
 	public func byExplicitlyClosing()->SubPath {
-		guard segments.count > 1 else { return self }
-		guard segments[0].end != segments.last!.end else { return self }
-		var newSegments = segments
-		newSegments.append(.init(end: segments[0].end, shape: .line))
-		return SubPath(segments: newSegments)
+		if closed {
+			return self
+		}
+		return SubPath(start:start, segments: segments, closed: true)
 	}
 	
 	
@@ -327,14 +315,12 @@ public struct SubPath {
 }
 
 public struct PathSegment {
-	
+	//in the next breaking version, remove the .point shape, and always have a start point for a SubPath, then introduce a boolean for whether the subPath is closed.
 	public var end:Point
 	public var shape:Shape
 	
 	///all shapes, except for point, assume a starting point of the previous endPoint
 	public enum Shape {
-		case point
-		
 		case line
 		///control point
 		case quadratic(Point)
@@ -351,14 +337,7 @@ public struct PathSegment {
 	
 	
 	public func boundingBox(from start:Point)->Rect {
-		var points:[Point]
-		switch shape {
-		case .point:
-			points = [end]
-			
-		default:
-			points = [start, end]
-		}
+		var points:[Point] = [start, end]
 		points.append(contentsOf: nonTerminalExtrema(from: start).map({ position(from: start, fraction: $0) }))
 		return Rect(boundingPoints: points)
 	}
@@ -366,8 +345,6 @@ public struct PathSegment {
 	
 	public func fastBoundingBox(from start:Point)->Rect {
 		switch shape {
-		case .point:
-			return Rect(origin: end, size: .zero)
 		case .line:
 			return Rect(boundingPoints: [start, end])
 		case .quadratic(let control):
@@ -380,9 +357,6 @@ public struct PathSegment {
 	///returns an array of fractional values of the non-terminal extrema
 	public func nonTerminalExtrema(from start:Point)->[SGFloat] {
 		switch shape {
-		case .point:
-			return []	//never any non-terminal extrema
-			
 		case .line:
 			return []	//never any non-terminal extrema
 			
@@ -416,8 +390,6 @@ public struct PathSegment {
 		let transformedSegment:PathSegment
 		let unTransformedEnd:Point
 		switch shape {
-		case .point:
-			return []
 		case .line:
 			return []
 		case .quadratic(let control):
@@ -501,39 +473,38 @@ public struct PathSegment {
 	
 	//returns an array of PathSegments suitably subdivided until none has maxDeviationsFromLinearity > linearity
 	public func subDivided(from start:Point, linearity:SGFloat)->[PathSegment] {
-		var accumulatedSegments:[PathSegment] = [self]
-		var index:Int = 0
+		var accumulatedSegments:[PathSegment] = []	//stack
+		var segmentsToDivide:[PathSegment] = [self]	//FILO, push on top, pop off top
 		var preceedingEndPoint:Point = start
-		while index < accumulatedSegments.count {
-			let segment:PathSegment = accumulatedSegments[index]
+		while segmentsToDivide.count > 0 {
+			let segment:PathSegment = segmentsToDivide.removeLast()
 			let fractions:[(fraction:SGFloat, distance:SGFloat)] = segment.maxDeviationsFromLinearity(from: preceedingEndPoint)
 			let divisionSpots:[(fraction:SGFloat, distance:SGFloat)] = fractions.filter({ $0.distance > linearity })
+			
 			if divisionSpots.count == 0 {
+				accumulatedSegments.append(segment)
 				preceedingEndPoint = segment.end
-				index += 1
 				continue
 			}
 			
 			//easy slow algorithm: only split at the first extrema, will re-encounter the other later
 			let (firstSegment, secondSegment) = segment.subDivide(at: divisionSpots[0].fraction, start: preceedingEndPoint)
-			accumulatedSegments.remove(at: index)
-			accumulatedSegments.insert(firstSegment, at: index)
-			accumulatedSegments.insert(secondSegment, at: index+1)
-			//we do not increment index and do not set preceedingEndPoint because we will re-consider firstSegment in the next loop
+			accumulatedSegments.append(secondSegment)
+			accumulatedSegments.append(firstSegment)
 			
+			/*
 			//TODO: hard fast algorithm: go ahead and split at all the points so we don't bother re-doing this math again
 			let sortedDivisionSpots:[(fraction:SGFloat, distance:SGFloat)] = divisionSpots
 			var previousFraction:SGFloat = 0.0
 			var replacementSegments:[PathSegment] = []
 			//not finished
+*/
 		}
 		return accumulatedSegments
 	}
 	
 	public func position(from start:Point, fraction:SGFloat)->Point {
 		switch shape {
-		case .point:
-			return end
 		case .line:
 			let line:Line = Line(point0: start, point1: end)
 			return line.pointAtFraction(fraction)
@@ -560,8 +531,6 @@ public struct PathSegment {
 	///the direction will not be normalized, and may not be non-zero
 	public func postionAndDerivative(from start:Point, fraction:SGFloat)->(Point, Point) {
 		switch shape {
-		case .point:
-			return (end, end-start)
 		case .line:
 			let line:Line = Line(point0: start, point1: end)
 			return (line.pointAtFraction(fraction), end-start)
@@ -584,15 +553,16 @@ public struct PathSegment {
 			let half1:Line = Line(point0: connectorCenter, point1: controlLine1.pointAtFraction(fraction))
 			let finalBar = Line(point0: half0.pointAtFraction(fraction), point1: half1.pointAtFraction(fraction))
 			let point = finalBar.pointAtFraction(fraction)
-			let (cx3, cx2, cx1, cx0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.x, P1: control0.x, P2: control1.x, P3: end.x)
+			let deriv = finalBar.point1 - finalBar.point0
+			//haven't figured out how to get new control points from the polynomials
+		/*	let (cx3, cx2, cx1, cx0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.x, P1: control0.x, P2: control1.x, P3: end.x)
 			let (cy3, cy2, cy1, cy0):(SGFloat, SGFloat, SGFloat, SGFloat) = bezierCoefficients(P0: start.y, P1: control0.y, P2: control1.y, P3: end.y)
 			let polynomialX:SGFloat = pow(fraction, 3)*cx3 + pow(fraction, 2)*cx2 + fraction*cx1 + cx0
 			let polynomialY:SGFloat = pow(fraction, 3)*cy3 + pow(fraction, 2)*cy2 + fraction*cy1 + cy0
 			print(polynomialX - point.x)
 			print(polynomialY - point.y)
-			let deriv = finalBar.point1 - finalBar.point0
 			let polynomialDx = 3*pow(fraction, 2)*cx3 + 2*fraction*cx2 + cx1
-			let polynomialDy = 3*pow(fraction, 2)*cy3 + 2*fraction*cy2 + cy1
+			let polynomialDy = 3*pow(fraction, 2)*cy3 + 2*fraction*cy2 + cy1	*/
 //			print(deriv.crossProductMagnitude(rhs: Point(x: polynomialDx, y: polynomialDy)))
 			return (point, deriv)
 		}
@@ -602,9 +572,6 @@ public struct PathSegment {
 	///this segment can be replaced by the two segments in the result
 	public func subDivide(at fraction:SGFloat, start:Point)->(PathSegment, PathSegment) {
 		switch shape {
-		case .point:
-			return (.init(end:start, shape:.point), .init(end:end, shape:.point))
-			
 		case .line:
 			let line:Line = Line(point0: start, point1: end)
 			let midPoint:Point = line.pointAtFraction(fraction)
@@ -635,7 +602,7 @@ public struct PathSegment {
 	///if the segment is quadratic or cubic, this replaces it with a line
 	public func replacingWithLines(from start:Point)->PathSegment {
 		switch shape {
-		case .point, .line:
+		case .line:
 			return self
 		default:
 			return PathSegment(end: end, shape: .line)
@@ -646,8 +613,6 @@ public struct PathSegment {
 	///assumes all segments are lines, not curves
 	public func isPoint(_ point:Point, within distance:SGFloat, start:Point, cap:Path.LineCap = .round, join:Path.LineJoin = .round)->Bool {
 		switch shape {
-		case .point:
-			return Line(point0: point, point1: end).length <= distance
 		case .line:
 			if point.y - distance > max(start.y, end.y) {
 				return false
@@ -703,9 +668,6 @@ public struct PathSegment {
 	///assuming a ray which extends from point to Point(x:-∞, y:point.y), how many intercepts with this path segment are there?
 	func intersectionCountFromNegativeInfinityX(at point:Point, from start:Point)->Int {
 		switch shape {
-		case .point:
-			return 0
-			
 		case .line:
 			if point.y > start.y && point.y > end.y {
 				return 0
@@ -794,12 +756,6 @@ public struct PathSegment {
 	
 	func intersections(with line:Line, start:Point)->[(Point, SGFloat)] {
 		switch shape {
-		case .point:
-			if let fraction = line.intersection(with: end) {
-				return [(end, fraction)]
-			}
-			return []
-			
 		case .line:
 			guard let (point, fraction):(Point, SGFloat) = Line(point0: start, point1: end).intersectionWithLine(line) else {
 				return []

@@ -86,8 +86,9 @@ public class SampledGraphicsContext : GraphicsContext {
 			let subsampleOffset:SGFloat = subsampleHeight/2.0
 			let subdividedPathInPixelCoordiantes:Path = pathInPixelCoordiantes
 				.subDivided(linearity: 0.5/SGFloat(resolution.rawValue))
+				.explicitlyClosingAllSubpaths()	//adds a line for the implicitly closed side of the path, allowing our line-based algorithms to efficiently compute interior angles
 				.replacingWithLines()
-				.explicitlyClosingAllSubpaths()
+				
 			//improve me by rendering as in a pixel buffer, and then compositing over the original image
 			if let shader = fillShader
 				,let boundingBox:Rect = subdividedPathInPixelCoordiantes.boundingBox?.roundedOut
@@ -128,16 +129,11 @@ public class SampledGraphicsContext : GraphicsContext {
 				var allSubPixelCrossings:[Int] = [Int](repeating: 0, count: subsampledXCoordinates.count * subsampledYCoordinates.count)
 				//increment the counts in allSubPixelCrossings for each line's crossing
 				for subPath in subdividedPathInPixelCoordiantes.subPaths {
-					var previousCoord:Point = .zero
+					var previousCoord:Point = subPath.start
 					for segment in subPath.segments {
-						switch segment.shape {
-						case .point:
-							break
-						default:
-							let line = Line(point0: previousCoord, point1: segment.end)
-							line.iterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea) { (subPixelx, subPixelY) in
-								allSubPixelCrossings[subPixelY * subPixelWidth + subPixelx] += 1
-							}
+						let line = Line(point0: previousCoord, point1: segment.end)
+						line.iterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea) { (subPixelx, subPixelY) in
+							allSubPixelCrossings[subPixelY * subPixelWidth + subPixelx] += 1
 						}
 						previousCoord = segment.end
 					}
@@ -220,9 +216,11 @@ public class SampledGraphicsContext : GraphicsContext {
 		var row:Int
 		var column:Int
 		
-		var hashValue: Int {
-			return row.hashValue ^ column.hashValue
+		func hash(into hasher: inout Hasher) {
+			row.hash(into: &hasher)
+			column.hash(into: &hasher)
 		}
+		
 		static func ==(lhs:PixelTriangleCoordinate, rhs:PixelTriangleCoordinate)->Bool {
 			return lhs.row == rhs.row && lhs.column == rhs.column
 		}
@@ -241,6 +239,7 @@ public class SampledGraphicsContext : GraphicsContext {
 			let maxY:SGFloat = SGFloat(row+1)
 			return Triangle(point0: Point(x: maxX, y: minY), point1: Point(x: maxX, y: maxY), point2: Point(x: minX, y: maxY))
 		}
+		
 	}
 	
 	public func saveState() {

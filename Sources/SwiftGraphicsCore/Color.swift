@@ -27,8 +27,8 @@ public struct Color {
 ///Practical color
 ///assumes a color space
 public struct SampledColor {
-	public var components:[[UInt8]]
-	public init(components:[[UInt8]]) {
+	public var components:[UInt8]
+	public init(components:[UInt8]) {
 		self.components = components
 	}
 }

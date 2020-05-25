@@ -8,7 +8,6 @@
 import Foundation
 
 
-
 ///Represents an affine transform using homogenous coordinates
 /// [ a  b  dx ]   [x]
 /// [ c  d  dy ] • [y]
@@ -79,7 +78,8 @@ public struct Transform2D {
 	}
 	
 	public func transform(_ point:Point)->Point {
-		return Point(x: a * point.x + b * point.y + dx, y:c*point.x + d*point.y + dy)
+		return Point(x: a * point.x + b * point.y + dx
+			,y:c*point.x + d*point.y + dy)
 	}
 	
 	public func transform(_ path:Path)->Path {
@@ -87,13 +87,13 @@ public struct Transform2D {
 	}
 	
 	internal func transform(_ subPath:SubPath)->SubPath {
-		return SubPath(segments: subPath.segments.map({ transform($0) }))
+		return SubPath(start:transform(subPath.start)
+			,segments: subPath.segments.map({ transform($0) })
+			,closed:subPath.closed)
 	}
 	
 	internal func transform(_ segment:PathSegment)->PathSegment {
 		switch segment.shape {
-		case .point:
-			return PathSegment.init(end: transform(segment.end), shape: .point)
 		case .line:
 			return PathSegment.init(end: transform(segment.end), shape: .line)
 			

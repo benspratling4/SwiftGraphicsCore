@@ -105,7 +105,7 @@ public struct RadialGradient : Shader {
 			else {
 			//return clear? for now
 			//TODO: adjust the color space to the ones in the stops
-			return SampledColor(components: [[0],[0],[0],[0]])
+			return SampledColor(components: [0,0,0,0])
 		}
 		return stops.resolvedColor(position: position, continuation:[])
 	}
@@ -128,7 +128,7 @@ extension Array where Element == GradientColorStop {
 			{
 				return lastColor
 			}
-			return SampledColor(components: [[0],[0],[0],[0]])
+			return SampledColor(components: [0,0,0,0])
 		}
 		let preceedingStop:GradientColorStop? = reversed().first(where:{ $0.position <= position })
 		let succeedingStop:GradientColorStop? = first(where:{ $0.position >= position })
@@ -138,19 +138,19 @@ extension Array where Element == GradientColorStop {
 			let fractionStartColor = stopDiff == 0.0 ? 0.0 : 1.0 - (position - firstStop.position) / stopDiff
 			let fractionEndColor = stopDiff == 0.0 ? 1.0 : 1.0 - (lastStop.position - position) / stopDiff
 			
-			let r:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components[0][0]) * fractionStartColor + SGFloat(lastStop.color.components[0][0]) * fractionEndColor).rounded()))
-			let g:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components[1][0]) * fractionStartColor + SGFloat(lastStop.color.components[1][0]) * fractionEndColor).rounded()))
-			let b:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components[2][0]) * fractionStartColor + SGFloat(lastStop.color.components[2][0]) * fractionEndColor).rounded()))
-			let a:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components.last?[0] ?? 255) * fractionStartColor + SGFloat(lastStop.color.components.last?[0] ?? 255) * fractionEndColor).rounded()))
+			let r:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components[0]) * fractionStartColor + SGFloat(lastStop.color.components[0]) * fractionEndColor).rounded()))
+			let g:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components[1]) * fractionStartColor + SGFloat(lastStop.color.components[1]) * fractionEndColor).rounded()))
+			let b:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components[2]) * fractionStartColor + SGFloat(lastStop.color.components[2]) * fractionEndColor).rounded()))
+			let a:UInt8 = UInt8(clamping: Int((SGFloat(firstStop.color.components.last ?? 255) * fractionStartColor + SGFloat(lastStop.color.components.last ?? 255) * fractionEndColor).rounded()))
 			
-			return SampledColor(components: [[r],[g],[b],[a]])
+			return SampledColor(components: [r,g,b,a])
 		} else if let eitherStop = preceedingStop ?? succeedingStop {
 			return eitherStop.color
 		}
 		
 		//failover, return clear
 		//TODO: adjust the color space to the ones in the stops
-		return SampledColor(components: [[0],[0],[0],[0]])
+		return SampledColor(components: [0,0,0,0])
 	}
 	
 }

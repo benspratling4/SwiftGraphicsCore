@@ -19,20 +19,14 @@ public class SampledImage {
 	public subscript (x:Int, y:Int)->SampledColor {
 		get {
 			let bytesPerPixel:Int = colorSpace.bytesPerComponent * colorSpace.componentCount
-			let components:[[UInt8]] = (0..<colorSpace.componentCount).map({ (componentIndex)->([UInt8]) in
-				let startIndex:Int = (dimensions.width * y + x) * bytesPerPixel + componentIndex * colorSpace.bytesPerComponent
-				return [UInt8](bytes[startIndex..<startIndex+colorSpace.bytesPerComponent])
-			})
-			return SampledColor(components: components)
+			let startIndex:Int = (dimensions.width * y + x) * bytesPerPixel
+			return SampledColor(components: [UInt8](bytes[startIndex..<startIndex+colorSpace.bytesPerComponent*colorSpace.componentCount]))
 		}
 		set {
 			let bytesPerPixel:Int = colorSpace.bytesPerComponent * colorSpace.componentCount
-			for componentIndex in 0..<colorSpace.componentCount {
-				let startIndex:Int = (dimensions.width * y + x) * bytesPerPixel + componentIndex * colorSpace.bytesPerComponent
-				for byteIndex in 0..<colorSpace.bytesPerComponent {
-					bytes[startIndex+byteIndex] = newValue.components[componentIndex][byteIndex]
-				}
-			}
+			let startIndex:Int = (dimensions.width * y + x) * bytesPerPixel
+			let totalByteCount = colorSpace.bytesPerComponent * colorSpace.componentCount
+			bytes[startIndex..<startIndex+totalByteCount] = newValue.components[0..<totalByteCount]
 		}
 	}
 	

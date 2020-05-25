@@ -141,9 +141,10 @@ public struct Triangle {
 	
 	
 	var subPath:SubPath {
-		var path = SubPath(startingPoint: point0)
+		var path = SubPath(start: point0)
 		path.addLine(to: point1)
 		path.addLine(to: point2)
+		path.close()
 		return path
 	}
 	
