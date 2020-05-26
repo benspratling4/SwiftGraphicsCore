@@ -17,10 +17,26 @@ public struct Path {
 		///This is the default case, and allows for subpaths to provide "cut outs"
 		case evenOdd
 		
-		///if a point is inside any subpath, it is "in".  This makes multiple subpaths always additive
+		///if a point is inside any subpath, it is "in".  This makes multiple subpaths always additive, regardless of the directions of the path segments
 		case nonZero
 		
-		//case windingNumber // not currently supported
+		/// a point is "inside" if there are more +y-direction path crossings to the left of the the point than -y-direction path crossings
+		///for instance, this is the way TTF font files determine their "inside"
+		case windingNumber // not currently supported
+		
+		func contains(intersectionCount:Int)->Bool {
+			switch self {
+			case .evenOdd:
+				return intersectionCount%2 != 0
+				
+			case .nonZero:
+				return intersectionCount != 0
+				
+			case .windingNumber:
+				return intersectionCount != 0
+			}
+		}
+		
 	}
 	
 	
@@ -56,11 +72,23 @@ public struct Path {
 	public func contains(_ point:Point, overlapping:SubPathOverlapping = .evenOdd)->Bool {
 		switch overlapping {
 		case .evenOdd:
-			let hitCount:Int = subPaths.filter({ $0.contains(point) }).count
+			let hitCount:Int = subPaths.filter({ $0.contains(point, overlapping: overlapping) }).count
 			return hitCount % 2 != 0
 		case .nonZero:
-			return subPaths.map({$0.contains(point)}).reduce(false, { $0 || $1 })
+			return subPaths.map({$0.contains(point, overlapping: overlapping)}).reduce(false, { $0 || $1 })
+		case .windingNumber:
+			//TODO: write me
+			fatalError("write me")
 		}
+	}
+	
+	
+	public func intersectionCountFromNegativeInfinityX(_ point:Point, overlapping:SubPathOverlapping = .evenOdd)->Int {
+		var count:Int = 0
+		for subPath in subPaths {
+			count += subPath.intersectionCountFromNegativeInfinityX(point, overlapping: overlapping)
+		}
+		return count
 	}
 	
 	public func isPoint(_ point:Point, within distance:SGFloat, cap:LineCap = .round, join:LineJoin = .round)->Bool {
@@ -281,6 +309,7 @@ public struct SubPath {
 		return SubPath(start:start, segments:newSegments, closed: closed)
 	}
 	
+	
 	public func byExplicitlyClosing()->SubPath {
 		if closed {
 			return self
@@ -293,7 +322,7 @@ public struct SubPath {
 	///		///precise calculation, imprecise exclusion provided by the overestimatedConvexHull
 	/// currently assumes the edges are all lines...  oh well.
 	///have not tested subpaths
-	public func contains(_ point:Point)->Bool {
+	public func contains(_ point:Point, overlapping:Path.SubPathOverlapping)->Bool {
 		if segments.count < 2 {
 			return false
 		}
@@ -301,12 +330,31 @@ public struct SubPath {
 		var runningCount:Int = 0
 		for segmentIndex in 1..<segments.count {
 			let segment = segments[segmentIndex]
-			runningCount += segment.intersectionCountFromNegativeInfinityX(at: point, from: previousStart)
+			runningCount += segment.intersectionCountFromNegativeInfinityX(at: point, from: previousStart, overlapping: overlapping)
 			previousStart = segment.end
 		}
-		return runningCount % 2 != 0
+		switch overlapping {
+		case .evenOdd:
+			return runningCount % 2 != 0
+		case .nonZero:
+			fatalError("write me")	//what is this?
+		case .windingNumber:
+			return runningCount != 0
+		}
+		
 	}
 	
+	
+	public func intersectionCountFromNegativeInfinityX(_ point:Point, overlapping:Path.SubPathOverlapping)->Int {
+		var count:Int = 0
+		var previousPoint:Point = start
+		for segment in segments {
+			count += segment.intersectionCountFromNegativeInfinityX(at: point, from: previousPoint, overlapping: overlapping)
+			previousPoint = segment.end
+		}
+		return count
+	}
+ 
 	//TODO: write me supports being able to split curves
 //	func intersection(rect:Rect)->SubPath? {
 //
@@ -405,7 +453,7 @@ public struct PathSegment {
 				//now find a transformation matrix that rotates that point to y = 0 x >= 0
 				let endMagnitude:SGFloat = sqrt(centeredEnd.x*centeredEnd.x + centeredEnd.y*centeredEnd.y)
 				let normalizedCenteredEnd:Point = centeredEnd / endMagnitude
-				let unRotating:Transform2D = Transform2D(a: normalizedCenteredEnd.x, b: -normalizedCenteredEnd.y, c: normalizedCenteredEnd.y, d: normalizedCenteredEnd.x, dx: 0.0, dy: 0.0)
+				let unRotating:Transform2D = Transform2D(a: normalizedCenteredEnd.x, b: normalizedCenteredEnd.y, c:-normalizedCenteredEnd.y, d: normalizedCenteredEnd.x, dx: 0.0, dy: 0.0)
 				let finalTransform:Transform2D = Transform2D(translateX: -start.x, y: -start.y).concatenate(with: unRotating)
 				let unTransformControl:Point = finalTransform.transform(control)
 				unTransformedEnd = finalTransform.transform(end)
@@ -489,8 +537,8 @@ public struct PathSegment {
 			
 			//easy slow algorithm: only split at the first extrema, will re-encounter the other later
 			let (firstSegment, secondSegment) = segment.subDivide(at: divisionSpots[0].fraction, start: preceedingEndPoint)
-			accumulatedSegments.append(secondSegment)
-			accumulatedSegments.append(firstSegment)
+			segmentsToDivide.append(secondSegment)
+			segmentsToDivide.append(firstSegment)
 			
 			/*
 			//TODO: hard fast algorithm: go ahead and split at all the points so we don't bother re-doing this math again
@@ -666,7 +714,7 @@ public struct PathSegment {
 	
 	
 	///assuming a ray which extends from point to Point(x:-∞, y:point.y), how many intercepts with this path segment are there?
-	func intersectionCountFromNegativeInfinityX(at point:Point, from start:Point)->Int {
+	func intersectionCountFromNegativeInfinityX(at point:Point, from start:Point, overlapping:Path.SubPathOverlapping)->Int {
 		switch shape {
 		case .line:
 			if point.y > start.y && point.y > end.y {

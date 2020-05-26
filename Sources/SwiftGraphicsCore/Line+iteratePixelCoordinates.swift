@@ -60,7 +60,7 @@ fileprivate func borderLines(for point:Point, with borders:Borders, inverseSubDi
 extension Line {
 	///line must be in pixel coordinates
 	///the handler block is called once for each sub pixel the line intersects
-	func iterateIntersectedSubPixelCoordinates(subdivision:Int, within frame:Rect, _ handler:(_ x:Int, _ y:Int)->()) {
+	func iterateIntersectedSubPixelCoordinates(subdivision:Int, within frame:Rect, _ handler:(_ x:Int, _ y:Int, _ crossings:Int)->()) {
 		let inverseSubDivision:SGFloat = 1.0/SGFloat(subdivision)
 		let halfInverseSubDivision:SGFloat = inverseSubDivision/2.0
 		let maxXCoord:Int = Int(frame.size.width) * subdivision - 1
@@ -141,7 +141,7 @@ extension Line {
 			let subPixelCenter:Point = subPixelCoordinateToPoint(x: coords.0, y: coords.1)
 			let lineToCross:Line = intersectionTestLine(for:subPixelCenter, inverseSubDivision:inverseSubDivision)
 			if let fraction:SGFloat = lineToCross.fractionOfSegmentIntersection(with: self), fraction < 1.0 {
-				handler(coords.0, coords.1)
+				handler(coords.0, coords.1, 1)
 			}
 			//find the side it leaves from
 			//TODO: make sure these lines intersects on their actual segments, and not beyond

@@ -74,7 +74,7 @@ public class SampledGraphicsContext : GraphicsContext {
 	
 	private var states:[GraphicsContextState] = [GraphicsContextState()]
 	
-	public func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?) {
+	public func drawPath(_ path:Path,  fill:FillOptions?, stroke:StrokeOptions?) {
 		let currentTransform:Transform2D = currentState.transformation
 		let inverseTransform:Transform2D = currentTransform.inverted
 		let pathInPixelCoordiantes:Path = currentTransform.transform(path)
@@ -90,9 +90,11 @@ public class SampledGraphicsContext : GraphicsContext {
 				.replacingWithLines()
 				
 			//improve me by rendering as in a pixel buffer, and then compositing over the original image
-			if let shader = fillShader
+			if let fillOptions = fill
 				,let boundingBox:Rect = subdividedPathInPixelCoordiantes.boundingBox?.roundedOut
 				,let affectedDrawingArea = boundingBox.intersection(with: Rect(origin: .zero, size: size)) {	//use the bounding rects of the subpaths?
+				let shader:Shader = fillOptions.shader
+				
 				//intersect with viewable area
 				let rows:[Int] = (Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY)).map({ $0 })
 				let subSampleIndexes:[SGFloat] = (0..<resolution.rawValue).map({ $0 }).map({ SGFloat($0) })
@@ -115,10 +117,7 @@ public class SampledGraphicsContext : GraphicsContext {
 				//for the first x coordinate, fill the crossing buffer with the number of crossings from negative x infinity at that point
 				var preCrossingsBuffer:[Int] = [Int](repeating: 0, count: subsampledYCoordinates.count)
 				for (i, y) in subsampledYCoordinates.enumerated() {
-					if subdividedPathInPixelCoordiantes.contains(Point(x: affectedDrawingArea.origin.x, y: y)) {
-						preCrossingsBuffer[i] = 1
-					}
-					//the rest are 0, it's ok, because mod works negative, too  :crossfingers:
+					preCrossingsBuffer[i] = subdividedPathInPixelCoordiantes.intersectionCountFromNegativeInfinityX(Point(x: affectedDrawingArea.origin.x, y: y), overlapping: fillOptions.subPathOverlapping)
 				}
 				
 				//make a giant grid of Int's, one for each subpixel
@@ -132,8 +131,8 @@ public class SampledGraphicsContext : GraphicsContext {
 					var previousCoord:Point = subPath.start
 					for segment in subPath.segments {
 						let line = Line(point0: previousCoord, point1: segment.end)
-						line.iterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea) { (subPixelx, subPixelY) in
-							allSubPixelCrossings[subPixelY * subPixelWidth + subPixelx] += 1
+						line.iterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea) { (subPixelx, subPixelY, crossings) in
+							allSubPixelCrossings[subPixelY * subPixelWidth + subPixelx] += crossings
 						}
 						previousCoord = segment.end
 					}
@@ -161,7 +160,7 @@ public class SampledGraphicsContext : GraphicsContext {
 								let subPixelCoordX = columnIndex*resolution.rawValue + subPixelx
 								let subPixelCoordY = rowIndex*resolution.rawValue + subPixelY
 								let crossingCount:Int = allSubPixelCrossings[subPixelCoordY * subPixelWidth + subPixelCoordX]
-								if crossingCount%2 > 0 {
+								if fillOptions.subPathOverlapping.contains(intersectionCount: crossingCount) {
 									let coordinate = Point(x: subsampledXCoordinates[subPixelCoordX], y: subsampledYCoordinates[subPixelCoordY])
 									hitColors.append(shader.color(at: coordinate))	//20% of time is on this line
 								}
@@ -176,16 +175,18 @@ public class SampledGraphicsContext : GraphicsContext {
 				}
 			}
 			
-			
+			/*
 			let crudeStrokingPath = pathInPixelCoordiantes.subDivided(linearity: 0.5).replacingWithLines()
-			if let (shader, options) = stroke
+			if let strokeOptions = stroke
 				,let boundingBox:Rect = crudeStrokingPath.boundingBox {
+				let shader = strokeOptions.shader
+				
 				//TODO: make me more efficient by following the bounding boxes of each underlying subpath segment
 				//intersect with viewable area
-				let halfLineWidth:SGFloat = options.lineWidth/2
+				let halfLineWidth:SGFloat = strokeOptions.lineWidth/2
 			
 				var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map { return currentTransform.transform($0) })
-				affectedRect = affectedRect.outset(uniform: Size(width: options.lineWidth, height:halfLineWidth))
+				affectedRect = affectedRect.outset(uniform: Size(width: strokeOptions.lineWidth, height:halfLineWidth))
 				affectedRect = affectedRect.roundedOut
 				if let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) {
 					for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
@@ -204,6 +205,7 @@ public class SampledGraphicsContext : GraphicsContext {
 					}
 				}
 			}
+*/
 //		case .triangulation:
 //			//idea is to break down the pixel into two triangles, then use geometry to perfectly calculate the affected triangles
 //			//TODO: write me
@@ -389,14 +391,16 @@ public class SampledGraphicsContext : GraphicsContext {
 	}
 	
 	
-	public func drawText(_ text:String, font:RenderingFont, fillShader:Shader?, stroke:(Shader, StrokeOptions)?) {
+	public func drawText(_ text: String, font: RenderingFont, fillShader: Shader?, stroke:StrokeOptions?) {
 		let glyphsIndexes:[Int] = font.gylphIndexes(text: text)
 		let advances:[SGFloat] = font.glyphAdvances(indices: glyphsIndexes)
 		let glyphs:[Path] = glyphsIndexes.map({ font.path(glyphIndex: $0) })
 		
 		var coord:Point = Point(x: 0.0, y: 0.0)
 		for (i, glyph) in glyphs.enumerated() {
-			drawPath(Transform2D(translateX: coord.x, y: coord.y).transform(glyph), fillShader: fillShader, stroke: stroke)
+			drawPath(Transform2D(translateX: coord.x, y: coord.y).transform(glyph)
+				,fill:fillShader.flatMap({ FillOptions(shader: $0, subPathOverlapping: .evenOdd) })	//change me to .windingNumber once it's implemented
+				,stroke: stroke)
 			coord.x += advances[i]
 		}
 	}

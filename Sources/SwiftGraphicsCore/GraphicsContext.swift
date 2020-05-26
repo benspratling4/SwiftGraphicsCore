@@ -17,11 +17,11 @@ public protocol GraphicsContext : class {
 	/// strokes if stroke is non-nil
 	/// to get a solid color, use SolidColorShader as the Shader
 	/// Shader colors should already be in the color space of the context
-	func drawPath(_ path:Path, fillShader:Shader?, stroke:(Shader, StrokeOptions)?)
+	func drawPath(_ path:Path, fill:FillOptions?, stroke:StrokeOptions?)
 	
 	///you can obtain a rendering font from a font
 	///text is always drawn at (0,0) along the x axis, so if that's not what you want, adjust your transformation matrix first
-	func drawText(_ text:String, font:RenderingFont, fillShader:Shader?, stroke:(Shader, StrokeOptions)?)
+	func drawText(_ text:String, font:RenderingFont, fillShader:Shader?, stroke:StrokeOptions?)
 	
 	///in a SampledGraphicsContext, the colorspaces must match
 	func drawImage(_ image:SampledImage, in rect:Rect)
@@ -40,12 +40,29 @@ public protocol GraphicsContext : class {
 }
 
 
+public struct FillOptions {
+	public var shader:Shader
+	public var subPathOverlapping:Path.SubPathOverlapping
+	
+	public init(shader:Shader, subPathOverlapping:Path.SubPathOverlapping = .evenOdd) {
+		self.shader = shader
+		self.subPathOverlapping = subPathOverlapping
+	}
+	
+	public init(color:SampledColor, subPathOverlapping:Path.SubPathOverlapping = .evenOdd) {
+		self.shader = SolidColorShader(color: color)
+		self.subPathOverlapping = subPathOverlapping
+	}
+}
+
 public struct StrokeOptions {
+	public var shader:Shader
 	public var cap:Path.LineCap
 	public var join:Path.LineJoin
 	public var lineWidth:SGFloat
 	
-	public init(lineWidth:SGFloat, cap:Path.LineCap = .round, join:Path.LineJoin = .round) {
+	public init(shader:Shader, lineWidth:SGFloat, cap:Path.LineCap = .round, join:Path.LineJoin = .round) {
+		self.shader = shader
 		self.lineWidth = lineWidth
 		self.cap = cap
 		self.join = join
