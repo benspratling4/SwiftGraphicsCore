@@ -7,7 +7,6 @@
 
 import Foundation
 
-
 public class SampledGraphicsContext : GraphicsContext {
 	
 	///initializes new storage for the context
@@ -114,12 +113,6 @@ public class SampledGraphicsContext : GraphicsContext {
 				})
 				let subsampledXCoordinates:[SGFloat] = subsampledXCoordinatesByPixel.flatMap({$0})
 				
-				//for the first x coordinate, fill the crossing buffer with the number of crossings from negative x infinity at that point
-				var preCrossingsBuffer:[Int] = [Int](repeating: 0, count: subsampledYCoordinates.count)
-				for (i, y) in subsampledYCoordinates.enumerated() {
-					preCrossingsBuffer[i] = subdividedPathInPixelCoordiantes.intersectionCountFromNegativeInfinityX(Point(x: affectedDrawingArea.origin.x, y: y), overlapping: fillOptions.subPathOverlapping)
-				}
-				
 				//make a giant grid of Int's, one for each subpixel
 				//then for each line segment, iterateIntersectedSubPixelCoordinates(subdivision:..., incrementing the subpixel for which it falls into
 				//then for each horizontal line, scan across leaving the sum of all preceeding counts, starting with
@@ -131,8 +124,15 @@ public class SampledGraphicsContext : GraphicsContext {
 					var previousCoord:Point = subPath.start
 					for segment in subPath.segments {
 						let line = Line(point0: previousCoord, point1: segment.end)
-						line.iterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea) { (subPixelx, subPixelY, crossings) in
-							allSubPixelCrossings[subPixelY * subPixelWidth + subPixelx] += crossings
+						line.simplifiedIterateIntersectedSubPixelCoordinates(subdivision: resolution.rawValue, within: affectedDrawingArea, fillMethod:fillOptions.subPathOverlapping) { (subPixelX, subPixelY, crossings) in
+							let actualX:Int = max(0, subPixelX)
+							if actualX >= subPixelWidth {
+//								print("untimely exit X")
+								return }
+							if subPixelY < 0 || subPixelY >= subsampledYCoordinates.count {
+//								print("untimely exit Y")
+								return }
+							allSubPixelCrossings[subPixelY * subPixelWidth + actualX] += crossings
 						}
 						previousCoord = segment.end
 					}
@@ -140,7 +140,7 @@ public class SampledGraphicsContext : GraphicsContext {
 				
 				//now replace each entry of the sum of all the ones before it
 				for row in 0..<subsampledYCoordinates.count {
-					var previousSum:Int = preCrossingsBuffer[row]
+					var previousSum:Int = 0
 					for column in 0..<subPixelWidth {
 						let newSum:Int = previousSum + allSubPixelCrossings[row * subPixelWidth + column]
 						allSubPixelCrossings[row * subPixelWidth + column] = newSum
@@ -399,7 +399,7 @@ public class SampledGraphicsContext : GraphicsContext {
 		var coord:Point = Point(x: 0.0, y: 0.0)
 		for (i, glyph) in glyphs.enumerated() {
 			drawPath(Transform2D(translateX: coord.x, y: coord.y).transform(glyph)
-				,fill:fillShader.flatMap({ FillOptions(shader: $0, subPathOverlapping: .evenOdd) })	//change me to .windingNumber once it's implemented
+				,fill:fillShader.flatMap({ FillOptions(shader: $0, subPathOverlapping: .windingNumber) })
 				,stroke: stroke)
 			coord.x += advances[i]
 		}

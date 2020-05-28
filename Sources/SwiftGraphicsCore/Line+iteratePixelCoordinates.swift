@@ -8,172 +8,160 @@
 import Foundation
 
 
-fileprivate struct Borders : OptionSet, CaseIterable {
-	var rawValue: UInt8
-	static let xMinus = Borders(rawValue: 1<<0)
-	static let xPlus = Borders(rawValue: 1<<1)
-	static let yMinus = Borders(rawValue: 1<<2)
-	static let yPlus = Borders(rawValue: 1<<3)
-	static var allCases:[Borders] {
-		return [.xMinus, .xPlus, .yMinus, .yPlus]
-	}
-	//show all the borders, except the ones in border
-	static func withoutOpposite(of border:Borders)->Borders {
-		var borders:Borders = Borders(Borders.allCases)
-		if border.contains(.xMinus){
-			borders.remove(.xPlus)
-		}
-		if border.contains(.xPlus){
-			borders.remove(.xMinus)
-		}
-		if border.contains(.yMinus){
-			borders.remove(.yPlus)
-		}
-		if border.contains(.yPlus){
-			borders.remove(.yMinus)
-		}
-		return borders
-	}
-}
-
-///the line we use to test for intersections for a given point
-fileprivate func intersectionTestLine(for point:Point, inverseSubDivision:SGFloat)->Line {
-	let xMax:SGFloat = point.x + inverseSubDivision
-	return Line(point0: Point(x: point.x, y: point.y), point1: Point(x: xMax, y: point.y))
-}
-
-
-//xminus, xplus, yminus, yplus
-fileprivate func borderLines(for point:Point, with borders:Borders, inverseSubDivision:SGFloat)->[(Line, Borders)] {
-	let minX:SGFloat = point.x
-	let maxX:SGFloat = point.x + inverseSubDivision
-	let minY:SGFloat = point.y - inverseSubDivision/2.0
-	let maxY:SGFloat = minY + inverseSubDivision
-	return [
-		borders.contains(.xMinus) ? (Line(point0: Point(x: minX, y: minY), point1: Point(x: minX, y: maxY)), .xMinus) : nil,
-		borders.contains(.xPlus) ? (Line(point0: Point(x: maxX, y: minY), point1: Point(x: maxX, y: maxY)), .xPlus) : nil,
-		borders.contains(.yMinus) ? (Line(point0: Point(x: minX, y: minY), point1: Point(x: maxX, y: minY)), .yMinus) : nil,
-		borders.contains(.yPlus) ? (Line(point0: Point(x: minX, y: maxY), point1: Point(x: maxX, y: maxY)), .yPlus) : nil,
-	].compactMap({ $0 })
-}
-
 extension Line {
-	///line must be in pixel coordinates
-	///the handler block is called once for each sub pixel the line intersects
-	func iterateIntersectedSubPixelCoordinates(subdivision:Int, within frame:Rect, _ handler:(_ x:Int, _ y:Int, _ crossings:Int)->()) {
-		let inverseSubDivision:SGFloat = 1.0/SGFloat(subdivision)
-		let halfInverseSubDivision:SGFloat = inverseSubDivision/2.0
-		let maxXCoord:Int = Int(frame.size.width) * subdivision - 1
-		let maxYCoord:Int = Int(frame.size.height) * subdivision - 1
-		func subPixelCoordinateToPoint(x:Int, y:Int)->Point {
-			return Point(x:frame.origin.x + SGFloat(x/subdivision) +  inverseSubDivision*SGFloat(x%subdivision)
-				,y:frame.origin.y + SGFloat(y/subdivision) + halfInverseSubDivision + inverseSubDivision*SGFloat(y%subdivision))
+	
+	///this method is allowed to call sub pixel coords for points for x < frame.origin.x, but not other extrema
+	func simplifiedIterateIntersectedSubPixelCoordinates(subdivision:Int, within frame:Rect
+		,fillMethod:Path.SubPathOverlapping = .evenOdd
+		,_ handler:(_ x:Int, _ y:Int, _ crossings:Int)->()) {
+		
+		//check for lines lying entirely out of bounds
+		if max(point0.y, point1.y) > frame.maxY {
+			return
+		}
+		if min(point0.y, point1.y) < frame.origin.y {
+			return
+		}
+		if min(point0.x, point1.x) > frame.maxX {
+			return
+		}
+		//we can't reject x < origin.x, because our scan conversion algorithms need to know about all x crossings to negative infinity
+		
+		//check for a horizontal line
+  		if point1.y == point0.y {
+			//horizontal lines don't contribute to scan algorithms
+			return
 		}
 		
-		func coordsFor(_ point:Point, rounding:FloatingPointRoundingRule)->(Int, Int) {
-			let xDiff:SGFloat = point.x - frame.origin.x
-			let xFloor:Int = Int((xDiff).rounded(rounding)) //doing crazy math to make sure pixel coordinates remain stable over large pixel counts
-			let xExtra:Int = Int(((xDiff - SGFloat(xFloor)) / inverseSubDivision).rounded(rounding))
-			let yDiff:SGFloat = point.y - frame.origin.y
-			let yFloor:Int = Int((yDiff).rounded(rounding)) //doing crazy math to make sure pixel coordinates remain stable over large pixel counts
-			let yExtra:Int = Int(((yDiff - SGFloat(yFloor)) / inverseSubDivision).rounded(rounding))
-			return ( xFloor*subdivision + xExtra, yFloor*subdivision + yExtra )
+		let oneOverSubdivision:SGFloat = 1.0/SGFloat(subdivision)
+		let subdivisions = [Int](0..<subdivision).map({ SGFloat($0) * oneOverSubdivision })
+		
+		enum Axis { case x, y }
+		
+		func subPixelCoord(at coord:SGFloat, on axis:Axis)->Int {
+			let base:SGFloat = axis == .x ? frame.origin.x : frame.origin.y
+			let overBase:SGFloat = coord - base
+			let down:SGFloat = overBase.rounded(.down)
+			let extra:SGFloat = overBase - down
+			return Int(down) * subdivision + Int((extra/oneOverSubdivision).rounded(.down))
 		}
 		
-		var coords:(Int, Int) = (0,0)	//we shouldn't have to define it, but the compiler can't figure out the proof that we will define it later
-		var preceedingBorder:Borders = Borders([])	////the border previously crossed
-		if frame.contains(point0) {
-			coords = coordsFor(point0, rounding:.down)
-		} else if frame.contains(point1) {
-			coords = coordsFor(point1, rounding:.down)
-		} else {
-			//detect glancing blow
-			//this is quite common
-			while true {
-				//find one side of the rect the line intersects, start with that intersection point
-				let xMin = Line(point0: Point(x: frame.origin.x, y: frame.origin.y), point1: Point(x: frame.origin.x, y: frame.maxY))
-				if let intersection:Point = xMin.segmentIntersection(with:self) {
-					coords = coordsFor(intersection, rounding: .up)
-					preceedingBorder = [.xPlus]
-					break
+		//may be outside the frame
+		func subPixelCoords(at point:Point)->(x:Int, y:Int) {
+			return (
+				subPixelCoord(at: point.x, on: .x),
+				subPixelCoord(at: point.y, on: .y)
+			)
+		}
+		
+		///x or y, does not do bounds checking with frame
+		func iterateSubPixelCoords(from minimum:SGFloat, to maximum:SGFloat, along axis:Axis, _ work:(Int, SGFloat)->()) {
+			//start out
+			let firstPixel:SGFloat = minimum.rounded(.down)
+			let lastPixel:SGFloat = maximum.rounded(.down)
+			//first pixel, check both bounds
+			let baseCoord:Int = subPixelCoord(at:firstPixel, on:axis)
+			for (sI, sub) in subdivisions.enumerated() {
+				let coord:SGFloat = firstPixel + sub
+				if coord >= minimum, coord <= maximum {
+					work(baseCoord + sI, coord)
 				}
-				
-				let xMax = Line(point0: Point(x: frame.maxX, y: frame.origin.y), point1: Point(x: frame.maxX, y: frame.maxY))
-				if let intersection:Point = xMax.segmentIntersection(with:self) {
-					coords = coordsFor(intersection, rounding: .down)
-					preceedingBorder = [.xMinus]
-					break
+			}
+			if lastPixel == firstPixel { return }
+			var pixel:SGFloat = firstPixel + 1.0
+			var subPixelCoordBase:Int = baseCoord + subdivision
+			while pixel < lastPixel {
+				for (sI, sub) in subdivisions.enumerated() {
+					let coord:SGFloat = pixel + sub
+					work(subPixelCoordBase + sI,coord)
 				}
-				
-				let yMin = Line(point0: Point(x: frame.origin.x, y: frame.origin.y), point1: Point(x: frame.maxX, y: frame.origin.y))
-				if let intersection:Point = yMin.segmentIntersection(with:self) {
-					coords = coordsFor(intersection, rounding: .up)
-					preceedingBorder = [.yMinus]
-					break
+				subPixelCoordBase += subdivision
+				pixel += 1.0
+			}
+			//last pixel
+			for (sI, sub) in subdivisions.enumerated() {
+				let coord:SGFloat = pixel + sub
+				if coord <= maximum {
+					work(subPixelCoordBase + sI,coord)
 				}
-				
-				let yMax = Line(point0: Point(x: frame.origin.x, y: frame.maxY), point1: Point(x: frame.maxX, y: frame.maxY))
-				if let intersection:Point = yMax.segmentIntersection(with:self) {
-					coords = coordsFor(intersection, rounding: .down)
-					preceedingBorder = [.yPlus]
-					break
-				}
-				//we were unable to find a starting point, return
-				return
 			}
 		}
 		
-		while true {
-			//prevent handler from being called for invalid coordinates
-			if coords.0 < 0{
-				return
-			}
-			if coords.1 < 0{
-				return
-			}
-			if coords.0 > maxXCoord {
-				return
-			}
-			if coords.1 > maxYCoord {
-				return
-			}
-			//determine if the line intersect's this subpixel's crossing line
-			let subPixelCenter:Point = subPixelCoordinateToPoint(x: coords.0, y: coords.1)
-			let lineToCross:Line = intersectionTestLine(for:subPixelCenter, inverseSubDivision:inverseSubDivision)
-			if let fraction:SGFloat = lineToCross.fractionOfSegmentIntersection(with: self), fraction < 1.0 {
-				handler(coords.0, coords.1, 1)
-			}
-			//find the side it leaves from
-			//TODO: make sure these lines intersects on their actual segments, and not beyond
-			let allBorderLines:[(Line, Borders)] = borderLines(for:subPixelCenter, with:.withoutOpposite(of:preceedingBorder), inverseSubDivision:inverseSubDivision)
-			var leavingSides:[Borders] = allBorderLines.filter({ $0.0.segmentIntersection(with: self) != nil }).map({ $0.1 })
-			if point0.x == point1.x, point0.x == lineToCross.point0.x {
-				//we're a vertical line at the xmin of this cell
-				//pretend we didn't intersect the xmin line
-				leavingSides = leavingSides.filter({ $0 != .xMinus })
-			}
-			if leavingSides.isEmpty {
-				//the line did not leave, we're done
-				return
+		///check for vertical line
+		if point1.x == point0.x {
+			let direction:Int
+			switch fillMethod {
+			case .evenOdd, .nonZero:
+				direction = 1
+			case .windingNumber:
+				direction = point1.y - point0.y > 0 ? 1 : -1	//may be backwards
 			}
 			
-			//what about horizontal or vertical lines?
+			let xCoord:Int = subPixelCoord(at: point1.x, on: .x)
+			let bottom:SGFloat = max(frame.origin.y, min(point0.y, point1.y))
+			let top:SGFloat = min(frame.maxY, max(point0.y, point1.y))
 			
-			//determine the next point to go to
-			if leavingSides.contains(.xPlus) {
-				coords.0 += 1
+			iterateSubPixelCoords(from: bottom, to: top, along: .y) { (subPixelYCoord, yValue) in
+				handler(xCoord, subPixelYCoord, direction)
 			}
-			if leavingSides.contains(.xMinus) {
-				coords.0 -= 1
+			return
+		}
+		let direction:Int
+		switch fillMethod {
+		case .evenOdd, .nonZero:
+			direction = 1
+		case .windingNumber:
+			direction = point1.y > point0.y ? 1 : -1
+		}
+		let bottom:SGFloat = max(frame.origin.y, min(point0.y, point1.y))
+		let top:SGFloat = min(frame.maxY, max(point0.y, point1.y))
+		
+		iterateSubPixelCoords(from: bottom, to: top, along: .y) { (subPixelYCoord, yValue) in
+			
+			guard let (fraction, point) = intersectionAtYEquals(yValue) else { return }
+			guard point.x < frame.maxX else { return }
+			if fillMethod == .windingNumber {
+				if yValue == top { return }
 			}
-			if leavingSides.contains(.yPlus) {
-				coords.1 += 1
+			else {
+				if yValue == top { return }	//is this right?
+				//TODO: for evenOdd, only count intersections if the other point is below a particular side
+//				if yValue == point1.y, point0.y < yValue { return }
 			}
-			if leavingSides.contains(.yMinus) {
-				coords.1 -= 1
-			}
-			preceedingBorder = Borders(leavingSides)
-			//loop
+			let xCoord = subPixelCoord(at: point.x, on: .x)
+			handler(xCoord, subPixelYCoord, direction)
 		}
 	}
+	
+	
+	func intersectionAtXEquals(_ x:SGFloat)->(SGFloat, Point)? {
+		if x < min(point0.x, point1.x) {
+			return nil
+		}
+		if x > max(point0.x, point1.x) {
+			return nil
+		}
+		let denominator:SGFloat = point1.x - point0.x
+		if denominator == 0 {
+			return (0.0, point0)
+		}
+		let fraction = (x - point0.x)/denominator
+		return (fraction, pointAtFraction(fraction))
+	}
+	
+	func intersectionAtYEquals(_ y:SGFloat)->(SGFloat, Point)? {
+		if y < min(point0.y, point1.y) {
+			return nil
+		}
+		if y > max(point0.y, point1.y) {
+			return nil
+		}
+		let denominator:SGFloat = point1.y - point0.y
+		if denominator == 0 {
+			return (0.0, point0)
+		}
+		let fraction = (y - point0.y)/denominator
+		return (fraction, pointAtFraction(fraction))
+	}
+	
 }
