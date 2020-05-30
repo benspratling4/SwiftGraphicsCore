@@ -310,86 +310,8 @@ public class SampledGraphicsContext : GraphicsContext {
 	
 	
 	public func drawImage(_ image:SampledImage, in rect:Rect) {
-		//TODO: write me!!!
-		//calculate the transform of the image, concatenate for a temp transform
-		//locate the pixels affected by the rect
-		
-		//transform them into the image space with the temp transform
-		
-		//invert the current transform to get
-		let inverseTransform:Transform2D = currentState.transformation.inverted
-		//intersect with viewable area
-		var affectedRect:Rect = Rect(boundingPoints:rect.corners.map {return inverseTransform.transform($0) })
-		affectedRect = affectedRect.roundedOut
-		guard let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) else { return }
-		
-		for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
-			for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
-				//TODO: write me
-				/*
-				guard let alias = antialiasing else {
-					//use nearest neighbor
-					let halfPixel:Point = Point(x: 0.5, y: 0.5)
-					let pixel:Point = Point(x: SGFloat(column), y: SGFloat(row)) + halfPixel
-					var transformed:Point = states[states.count-1].transformation.transform( pixel)
-					transformed = transformed - halfPixel
-					let xCoord:Int = Int(transformed.x.rounded())
-					let yCoord:Int = Int(transformed.y.rounded())
-					if xCoord < 0 || yCoord < 0 || xCoord >= image.dimensions.width || yCoord >= image.dimensions.height {
-						continue
-					}
-					let sample:SampledColor = image[xCoord, yCoord]
-					if underlyingImage.colorSpace.hasAlpha {
-						let underValue:SampledColor = underlyingImage[column, row]
-								underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:[(sample, antialiasFactor: 1.0)], over: underValue)
-					} else {
-								underlyingImage[column, row] = sample
-					}
-					continue
-				}
-				
-				switch alias {
-				case .subsampling(resolution: let resolution):
-					//TODO: write me
-					let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
-					var antiliasingFraction:Float32 = 1.0/Float32(subSampleLocations.count)
-					let pixel:Point = Point(x: SGFloat(column), y: SGFloat(row))
-					for subPixel in subSampleLocations {
-						let transformed:Point = states[states.count-1].transformation.transform(pixel + subPixel)
-						
-						let xCoord:Int = Int(transformed.x.rounded())
-						let yCoord:Int = Int(transformed.y.rounded())
-						if xCoord < 0 || yCoord < 0 || xCoord >= image.dimensions.width || yCoord >= image.dimensions.height {
-							continue
-						}
-						let sample:SampledColor = image[xCoord, yCoord]
-						if underlyingImage.colorSpace.hasAlpha {
-							let underValue:SampledColor = underlyingImage[column, row]
-							underlyingImage[column, row] = underlyingImage.colorSpace.composite(source: [(sample, antialiasFactor:antiliasingFraction)], over: underValue)
-						} else {
-							underlyingImage[column, row] = sample
-						}
-						continue
-					}
-					
-					
-					
-					
-				case .triangulation:
-					
-					//TODO: write me
-					
-					
-					continue
-					
-				}
-				*/
-				
-				
-				
-			}
-		}
-		
+		guard let interpolator = try? interpolation.init(image, into: underlyingImage, in: rect, transform: currentState.transformation) else { return }
+		interpolator.perform()
 	}
 	
 	
@@ -406,5 +328,7 @@ public class SampledGraphicsContext : GraphicsContext {
 			coord.x += advances[i]
 		}
 	}
+	
+	public var interpolation:SampledImageInterpolation.Type = BicubicInterpolation.self
 	
 }

@@ -23,7 +23,7 @@ class BezierRenderTests : XCTestCase {
 		path.addCurve(near:Point(x: size/2.0, y: size)
 			,and:Point(x: size/2.0, y: 0.0)
 			,to:Point(x: size, y: size/2.0))
-		context.drawPath(path, fillShader: SolidColorShader(color: colorSpace.black), stroke: nil)
+		context.drawPath(path, fill:FillOptions(color: colorSpace.black), stroke: nil)
 	}
 	
 }

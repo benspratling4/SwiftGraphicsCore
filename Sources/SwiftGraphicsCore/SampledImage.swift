@@ -6,6 +6,10 @@ public class SampledImage {
 	
 	public var dimensions:(width:Int, height:Int)
 	
+	public var size:Size {
+		return Size(width: SGFloat(dimensions.width), height: SGFloat(dimensions.height))
+	}
+	
 	public var colorSpace:ColorSpace
 	
 	public var bytes:[UInt8]

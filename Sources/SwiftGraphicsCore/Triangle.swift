@@ -158,6 +158,10 @@ public struct Triangle {
 	}
 	
 	
+	public var boundingBox:Rect {
+		return Rect(boundingPoints: points)
+	}
+	
 }
 
 
