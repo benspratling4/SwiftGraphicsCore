@@ -46,10 +46,10 @@ public struct Path {
 		
 		///the line ends at the point, with a line perpendicular to the slope at that point
 		///not supported
-//		case butt
+		case butt
 		
 		///not supported
-//		case square
+		case square
 	}
 	
 	public enum LineJoin {
@@ -59,8 +59,7 @@ public struct Path {
 		///not supported
 //		case miter(limit:SGFloat?)
 		
-		///not supported
-//		case bevel
+		case bevel
 	}
 	
 	public var subPaths:[SubPath]
@@ -229,6 +228,27 @@ public struct SubPath {
 			,.init(end: inRect.origin + Point(x: 0.0, y: inRect.size.height), shape: .line)
 		]
 		closed = true
+	}
+	
+	public init(ellipseIn rect:Rect) {
+		let dy:SGFloat = rect.size.height / 4
+		let dx:SGFloat = rect.size.width/4
+		let center:Point = rect.center
+		var path = SubPath(start: Point(x: rect.origin.x, y: center.y))
+		path.addCurve(near: Point(x: rect.origin.x, y: center.y + dy)
+			,and: Point(x: center.x - dx, y: rect.maxY)
+			,to: Point(x: center.x, y: rect.maxY))
+		path.addCurve(near: Point(x: center.x + dx, y: rect.maxY)
+			,and: Point(x: rect.maxX, y: center.y + dy)
+			,to: Point(x: rect.maxX, y: center.y))
+		path.addCurve(near: Point(x: rect.maxX - dx, y: rect.maxY)
+			,and: Point(x: center.x + dx, y: rect.maxY - dy )
+			,to: Point(x: center.x, y: rect.origin.y))
+		path.addCurve(near: Point(x: center.x - dx, y: rect.maxY)
+			,and: Point(x: rect.origin.x, y: rect.maxY - dy )
+			,to: Point(x: rect.origin.x, y: center.y))
+		path.close()
+		self = path
 	}
 	
 	public func isPoint(_ point:Point, within distance:SGFloat, cap:Path.LineCap = .round, join:Path.LineJoin = .round)->Bool {

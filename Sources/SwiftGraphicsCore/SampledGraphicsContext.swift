@@ -177,35 +177,8 @@ public class SampledGraphicsContext : GraphicsContext {
 			
 			//Stroking
 			if let strokeOptions = stroke {
-				//TODO: make me more efficient by generating outlines of the stroke and then filling that outline path with non-zero fill.
-				let crudeStrokingPath = pathInPixelCoordiantes.subDivided(linearity: 0.5).replacingWithLines()
-				if let boundingBox:Rect = crudeStrokingPath.boundingBox {
-					let shader = strokeOptions.shader
-					
-					//TODO: make me more efficient by following the bounding boxes of each underlying subpath segment
-					//intersect with viewable area
-					let halfLineWidth:SGFloat = strokeOptions.lineWidth/2
-				
-					var affectedRect:Rect = Rect(boundingPoints:boundingBox.corners.map { return currentTransform.transform($0) })
-					affectedRect = affectedRect.outset(uniform: Size(width: strokeOptions.lineWidth, height:halfLineWidth))
-					affectedRect = affectedRect.roundedOut
-					if let affectedDrawingArea = affectedRect.intersection(with: Rect(origin: .zero, size: size)) {
-						for row in Int(affectedDrawingArea.origin.y)..<Int(affectedDrawingArea.maxY) {
-							for column in Int(affectedDrawingArea.origin.x)..<Int(affectedDrawingArea.maxX) {
-								let subSampleLocations:[Point] = subsampledPixelCoordinates(row: row, column: column)
-								let subSamplePixelLocation:[Point] = subSampleLocations.map({ inverseTransform.transform($0) })
-								let hitColors:[SampledColor] = subSamplePixelLocation.compactMap { (point) -> SampledColor? in
-									return !crudeStrokingPath.isPoint(point, within: halfLineWidth) ? nil : shader.color(at: point)
-								}
-								if hitColors.count == 0 { continue }
-								let antialiasRatio:Float32 = 1.0/Float32(subSampleLocations.count)
-								let antialiases:[(SampledColor, Float32)] = hitColors.map({ ($0, antialiasFactor:antialiasRatio)})
-								let underValue:SampledColor = underlyingImage[column, row]
-								underlyingImage[column, row] = underlyingImage.colorSpace.composite(source:antialiases, over: underValue)
-							}
-						}
-					}
-				}
+				let offsetPath = path.offsetSubpaths(thickness: strokeOptions.lineWidth, lineCap: strokeOptions.cap, join: strokeOptions.join)
+				drawPath(offsetPath, fill: FillOptions(shader: strokeOptions.shader, subPathOverlapping: .windingNumber), stroke: nil)
 			}
 
 //		case .triangulation:

@@ -58,6 +58,21 @@ public struct Line {
 		return (pointAtFraction(scalar), scalar)
 	}
 	
+	
+	public func outOfSegmentIntersectionWithLine(_ otherLine:Line)->(SGFloat, Point)? {
+		let dx:SGFloat = otherLine.point1.x-otherLine.point0.x
+		let dy:SGFloat = otherLine.point1.y - otherLine.point0.y
+		let denominator:SGFloat = (point1.x - point0.x)*dy - (point1.y-point0.y)*dx
+		if abs(denominator) < 0.0000000001 {
+			return nil
+		}
+		
+		let numerator:SGFloat = dx*(point0.y-otherLine.point0.y)  + dy*(otherLine.point0.x-point0.x)
+		let t:SGFloat = numerator / denominator
+		let point:Point = pointAtFraction(t)
+		return (t, point)
+	}
+	
 	/// return the point on the line closest to the given point, and the fractional position along the line
 	public func nearestPoint(to point:Point)->(Point, SGFloat) {
 		//construct a perpendicular line through the given point, return the intersection
